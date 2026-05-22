@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Disney Adventure 房間分組</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-left">
+    <img id="ship-logo" src="logo.png" alt="Disney Adventure" class="ship-logo">
+    <label>Deck
+      <select id="deck-select" aria-label="選擇樓層"></select>
+    </label>
+  </div>
+  <div class="topbar-right">
+    <input id="search" type="search" placeholder="跳到房號…" aria-label="跳到房號">
+    <label>主題
+      <select id="theme-filter" aria-label="主題篩選"></select>
+    </label>
+    <label>類別
+      <select id="category-filter" aria-label="類別篩選"></select>
+    </label>
+    <div id="filter-chip" class="filter-chip" hidden>
+      <span id="filter-chip-text"></span>
+      <button id="filter-chip-clear" type="button" aria-label="清除篩選">✕</button>
+    </div>
+    <button id="reset-btn" type="button" class="danger">清除全部</button>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="sidebar" aria-label="分組面板">
+    <section class="groups-section">
+      <div class="section-header">
+        <h2>分組</h2>
+        <button id="add-group" type="button" class="primary">＋ 新增</button>
+      </div>
+      <ul id="groups-list" class="groups-list" aria-live="polite"></ul>
+      <p class="hint" id="assign-hint">
+        提示：點分組左邊的圓點切換「指派模式」，亮起時點甲板圖上的房間 = 加入該組（再點 = 移出）。一間房可以同時屬於多個分組。
+      </p>
+    </section>
+
+    <section class="bulk-section">
+      <h2>批次輸入</h2>
+      <label>
+        房號（逗號 / 空白 / 換行分隔）
+        <textarea id="bulk-input" rows="5" placeholder="10502, 10504&#10;10506 10508&#10;…"></textarea>
+      </label>
+      <div class="bulk-controls">
+        <label>指派到
+          <select id="bulk-group" aria-label="目標分組"></select>
+        </label>
+        <button id="bulk-assign" type="button" class="primary">加入分組</button>
+        <button id="bulk-remove" type="button">從此組移除</button>
+      </div>
+      <p class="bulk-feedback" id="bulk-feedback"></p>
+    </section>
+
+    <section class="legend-section">
+      <h2>圖例</h2>
+      <ul class="legend">
+        <li><span class="swatch swatch-inside"></span>Inside（內艙）</li>
+        <li><span class="swatch swatch-outside"></span>Oceanview（海景）</li>
+        <li><span class="swatch swatch-verandah"></span>Verandah（陽台）</li>
+        <li><span class="swatch swatch-suite"></span>Suite / Concierge（套房）</li>
+      </ul>
+    </section>
+  </aside>
+
+  <section class="map-area">
+    <div class="map-toolbar">
+      <span id="deck-info" class="deck-info"></span>
+      <div class="zoom-controls">
+        <button id="zoom-out" type="button" aria-label="縮小">−</button>
+        <span id="zoom-label">100%</span>
+        <button id="zoom-in" type="button" aria-label="放大">＋</button>
+        <button id="zoom-reset" type="button">適合畫面</button>
+      </div>
+    </div>
+    <div class="map-scroll" id="map-scroll">
+      <div class="map-stage" id="map-stage">
+        <!-- Disney SVG injected here -->
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="popup" class="popup" hidden role="dialog" aria-modal="false" aria-labelledby="popup-title">
+  <header class="popup-header">
+    <h3 id="popup-title">房號</h3>
+    <button id="popup-close" type="button" aria-label="關閉">✕</button>
+  </header>
+  <dl class="popup-body" id="popup-body"></dl>
+  <div class="popup-groups" id="popup-groups" role="group" aria-label="所屬分組"></div>
+  <div class="popup-note">
+    <label for="popup-note-text">備註</label>
+    <textarea id="popup-note-text" rows="3" placeholder="輸入備註，會自動儲存…"></textarea>
+  </div>
+  <footer class="popup-footer">
+    <button id="popup-clear" type="button">全部移除</button>
+  </footer>
+</div>
+
+<div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
