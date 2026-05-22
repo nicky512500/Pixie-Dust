@@ -1,6 +1,7 @@
 'use strict';
 
 const STORAGE_KEY = 'disney-cruise-groups-v1';
+const UI_KEY = 'disney-cruise-ui-v1';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const DEFAULT_COLORS = [
   '#ff6b6b', '#4aa8ff', '#57c8a2', '#c79a4b', '#b673e0',
@@ -864,6 +865,28 @@ function applyZoom() {
   if (input && document.activeElement !== input) {
     input.value = Math.round(state.zoom * 100);
   }
+  persistUi();
+}
+
+function persistUi() {
+  const mapArea = document.querySelector('.map-area');
+  const toolbarCollapsed = !!(mapArea && mapArea.classList.contains('toolbar-collapsed'));
+  try {
+    localStorage.setItem(UI_KEY, JSON.stringify({ zoom: state.zoom, toolbarCollapsed }));
+  } catch (e) { /* full / unavailable — non-fatal */ }
+}
+
+function loadPersistedUi() {
+  try {
+    const raw = localStorage.getItem(UI_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) || {};
+  } catch (e) { return {}; }
+}
+
+function loadPersistedZoom() {
+  const z = Number(loadPersistedUi().zoom);
+  return (Number.isFinite(z) && z >= 0.1 && z <= 3) ? z : null;
 }
 
 function setZoomPercent(pct) {
@@ -1054,8 +1077,14 @@ async function init() {
   renderBulkGroupSelect();
   renderPopupGroupSelect();
   showDeck(state.currentDeck);
-  // Default fit-to-screen
-  requestAnimationFrame(fitZoom);
+  // Restore last zoom; if none saved, fit-to-screen.
+  const savedZoom = loadPersistedZoom();
+  if (savedZoom != null) {
+    state.zoom = savedZoom;
+    requestAnimationFrame(applyZoom);
+  } else {
+    requestAnimationFrame(fitZoom);
+  }
 
   // Event wiring
   document.getElementById('deck-select').addEventListener('change', (e) => showDeck(parseInt(e.target.value, 10)));
@@ -1129,6 +1158,25 @@ async function init() {
       closeSidebar();
     }
   });
+
+  // Mobile toolbar collapse
+  const toolbarToggle = document.getElementById('toolbar-toggle');
+  const mapArea = document.querySelector('.map-area');
+  if (toolbarToggle && mapArea) {
+    const applyToolbarCollapsed = (collapsed) => {
+      mapArea.classList.toggle('toolbar-collapsed', collapsed);
+      toolbarToggle.textContent = collapsed ? '▼' : '▲';
+      toolbarToggle.setAttribute('aria-expanded', String(!collapsed));
+      toolbarToggle.setAttribute('aria-label', collapsed ? '展開工具列' : '收合工具列');
+    };
+    // Restore from storage
+    if (loadPersistedUi().toolbarCollapsed) applyToolbarCollapsed(true);
+    toolbarToggle.addEventListener('click', () => {
+      const next = !mapArea.classList.contains('toolbar-collapsed');
+      applyToolbarCollapsed(next);
+      persistUi();
+    });
+  }
 
   // Mobile sidebar drawer
   const sidebarToggle = document.getElementById('sidebar-toggle');
