@@ -30,7 +30,10 @@
       <span id="filter-chip-text"></span>
       <button id="filter-chip-clear" type="button" aria-label="清除篩選">✕</button>
     </div>
-    <button id="offline-btn" type="button" title="把整個網頁下載到瀏覽器，沒網路也能用">📥 下載離線版</button>
+    <div class="offline-wrap">
+      <button id="offline-btn" type="button" title="把整個網頁下載到瀏覽器，沒網路也能用">📥 下載離線版</button>
+      <button id="offline-clear" type="button" class="offline-clear" title="清除已下載的離線版" hidden aria-label="清除離線版">✕</button>
+    </div>
     <button id="reset-btn" type="button" class="danger">清除全部</button>
   </div>
 </header>

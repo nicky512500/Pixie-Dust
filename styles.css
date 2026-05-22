@@ -52,6 +52,14 @@ button.danger:hover { background: #fbeeee; }
 button.offline-ready, #offline-btn.offline-ready { background: #e6f5ec; border-color: #9ed8bf; color: #1f7a4e; }
 button.offline-ready:hover { background: #d6efe0; }
 
+.offline-wrap { display: inline-flex; align-items: center; gap: 4px; }
+.offline-clear {
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.offline-clear:hover { color: var(--danger); border-color: #f0c8c8; background: #fbeeee; }
+
 select, input[type="text"], input[type="search"], textarea {
   background: var(--panel);
   border: 1px solid var(--border);

@@ -908,11 +908,32 @@ async function setupOffline() {
     return;
   }
 
+  const clearBtn = document.getElementById('offline-clear');
+
   // If the cache already exists, mark as ready.
   if ('caches' in window) {
     const cached = await caches.match('./rooms.json');
-    if (cached) markOfflineReady(btn);
+    if (cached) markOfflineReady(btn, clearBtn);
   }
+
+  clearBtn.addEventListener('click', async () => {
+    if (!confirm('清除已下載的離線版？分組與備註不會受影響。下次需要離線使用時要重新下載。')) return;
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    } catch (e) {
+      showToast('清除失敗：' + e.message, true);
+      return;
+    }
+    btn.disabled = false;
+    btn.textContent = '📥 下載離線版';
+    btn.classList.remove('offline-ready');
+    btn.title = '把整個網頁下載到瀏覽器，沒網路也能用';
+    clearBtn.hidden = true;
+    showToast('離線版已清除');
+  });
 
   btn.addEventListener('click', async () => {
     const sw = navigator.serviceWorker.controller || (await navigator.serviceWorker.ready).active;
@@ -929,7 +950,7 @@ async function setupOffline() {
         btn.textContent = `下載中… ${Math.round(d.done / d.total * 100)}%`;
       } else if (d.type === 'cache-done') {
         navigator.serviceWorker.removeEventListener('message', onMsg);
-        markOfflineReady(btn);
+        markOfflineReady(btn, clearBtn);
         showToast('離線版已就緒，可關閉網路使用');
       } else if (d.type === 'cache-error') {
         navigator.serviceWorker.removeEventListener('message', onMsg);
@@ -943,11 +964,12 @@ async function setupOffline() {
   });
 }
 
-function markOfflineReady(btn) {
+function markOfflineReady(btn, clearBtn) {
   btn.disabled = false;
   btn.textContent = '✓ 離線版已就緒';
   btn.classList.add('offline-ready');
-  btn.title = '已將整個網頁下載到瀏覽器。沒網路也能打開這個網址（前提是瀏覽器分頁有開過）。再點一次重新下載最新版。';
+  btn.title = '已將整個網頁下載到瀏覽器。沒網路也能打開這個網址。再點一次會重新下載最新版。';
+  if (clearBtn) clearBtn.hidden = false;
 }
 
 // ---------- Boot ----------
