@@ -472,6 +472,9 @@ function toggleAssigning(groupId) {
   state.assigningGroupId = state.assigningGroupId === groupId ? null : groupId;
   renderGroups();
   updateAssignHint();
+  // On mobile, close the drawer so the user can immediately tap rooms
+  // on the map without dismissing it manually.
+  if (state.assigningGroupId && isMobileViewport()) closeSidebar();
 }
 
 function updateAssignHint() {
@@ -594,8 +597,19 @@ function renderPopupGroupCheckboxes(roomId) {
   }
 }
 
+function isMobileViewport() {
+  return window.innerWidth <= 900;
+}
+
 function positionPopup(anchorEl) {
   const popup = document.getElementById('popup');
+  // On mobile the popup is a bottom-sheet anchored via CSS — clear any
+  // previous inline left/top so it can't fight the stylesheet.
+  if (isMobileViewport()) {
+    popup.style.left = '';
+    popup.style.top = '';
+    return;
+  }
   const rect = anchorEl.getBoundingClientRect();
   const popupRect = popup.getBoundingClientRect();
   let left = rect.right + 8;
@@ -875,6 +889,32 @@ function fitZoom() {
   applyZoom();
 }
 
+// ---------- Sidebar drawer (mobile) ----------
+
+function openSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  const toggle = document.getElementById('sidebar-toggle');
+  if (!sidebar || !backdrop) return;
+  sidebar.classList.add('open');
+  backdrop.hidden = false;
+  // Force reflow so the opacity transition runs.
+  void backdrop.offsetWidth;
+  backdrop.classList.add('open');
+  if (toggle) toggle.setAttribute('aria-expanded', 'true');
+}
+
+function closeSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  const toggle = document.getElementById('sidebar-toggle');
+  if (!sidebar || !backdrop) return;
+  sidebar.classList.remove('open');
+  backdrop.classList.remove('open');
+  backdrop.hidden = true;
+  if (toggle) toggle.setAttribute('aria-expanded', 'false');
+}
+
 // ---------- Toast ----------
 
 let toastTimer = null;
@@ -1084,7 +1124,29 @@ async function init() {
     if (e.key === 'Enter') zoomInput.blur();
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closePopup();
+    if (e.key === 'Escape') {
+      closePopup();
+      closeSidebar();
+    }
+  });
+
+  // Mobile sidebar drawer
+  const sidebarToggle = document.getElementById('sidebar-toggle');
+  const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+  if (sidebarToggle) {
+    sidebarToggle.addEventListener('click', () => {
+      const sidebar = document.querySelector('.sidebar');
+      if (sidebar.classList.contains('open')) closeSidebar();
+      else openSidebar();
+    });
+  }
+  if (sidebarBackdrop) {
+    sidebarBackdrop.addEventListener('click', closeSidebar);
+  }
+  // If the viewport grows past the mobile breakpoint, ensure the drawer
+  // doesn't stay stuck in the open state from a previous resize.
+  window.addEventListener('resize', () => {
+    if (!isMobileViewport()) closeSidebar();
   });
 
   setupOffline();

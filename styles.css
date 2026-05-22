@@ -85,6 +85,30 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
   display: block;
 }
 .topbar-right { display: flex; align-items: center; gap: 8px; }
+
+/* Sidebar toggle (hidden on desktop; shown on mobile via media query) */
+.sidebar-toggle {
+  display: none;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  font-size: 20px;
+  line-height: 1;
+  padding: 6px 12px;
+}
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 30, 50, 0.45);
+  z-index: 40;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.sidebar-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.btn-text-short { display: none; }
 .topbar label { display: flex; align-items: center; gap: 6px; color: var(--text-dim); }
 #search { width: 220px; }
 .search-wrap { display: flex; align-items: center; gap: 6px; }
@@ -459,7 +483,121 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
 
 /* Hidden venue / outline / etc — keep visible by default; Disney's styles already in the inline SVG style block */
 
+/* ---------- Mobile ---------- */
 @media (max-width: 900px) {
-  .layout { grid-template-columns: 1fr; }
-  .sidebar { border-right: none; border-bottom: 1px solid var(--border); max-height: 40vh; }
+  /* Topbar: compact */
+  .topbar { padding: 8px 12px; gap: 8px; }
+  .topbar-left { gap: 8px; }
+  .ship-logo { height: 28px; }
+  .sidebar-toggle { display: inline-flex; align-items: center; justify-content: center; }
+  .topbar-right { gap: 6px; }
+  .topbar-right button { padding: 8px 10px; font-size: 13px; }
+  #offline-btn .btn-text { display: none; }
+  #offline-btn { padding: 8px 10px; font-size: 16px; line-height: 1; }
+  #reset-btn .btn-text-full { display: none; }
+  #reset-btn .btn-text-short { display: inline; }
+
+  /* Sidebar as slide-in drawer */
+  .layout {
+    grid-template-columns: 1fr;
+    position: relative;
+  }
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: min(86vw, 360px);
+    max-height: 100%;
+    z-index: 50;
+    border-right: 1px solid var(--border);
+    border-bottom: none;
+    transform: translateX(-100%);
+    transition: transform 0.24s ease;
+    box-shadow: 6px 0 20px rgba(20, 30, 50, 0.2);
+    padding-bottom: 24px;
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  /* Map area takes full width */
+  .map-area { width: 100%; }
+  .map-toolbar { padding: 8px 12px; gap: 8px; }
+  .deck-info { padding: 6px 12px; }
+  .map-controls { gap: 8px; width: 100%; }
+  .map-controls .inline-label { flex-shrink: 0; }
+  .map-controls .search-label { flex: 1; min-width: 140px; }
+  .map-controls .search-label #search {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+  }
+  .zoom-controls { width: 100%; justify-content: flex-end; gap: 4px; }
+
+  /* Larger touch targets in toolbar */
+  .map-controls select,
+  .map-controls input[type="search"] {
+    padding: 8px 10px;
+    min-height: 38px;
+  }
+  /* Zoom controls: keep touch-friendly but visually quieter */
+  .zoom-controls button {
+    padding: 4px 10px;
+    min-width: 32px;
+    min-height: 32px;
+    font-size: 14px;
+  }
+  #zoom-reset { padding: 4px 12px; font-size: 13px; }
+  #zoom-value {
+    padding: 4px 6px;
+    min-height: 32px;
+    width: 3.2em;
+  }
+  .zoom-suffix { font-size: 12px; }
+
+  /* Larger touch targets in sidebar */
+  .group-paint { width: 28px; height: 28px; }
+  .group-color-input { width: 30px; height: 30px; }
+  .group-expand { padding: 6px 10px; min-height: 32px; }
+  .group-actions button { padding: 6px 10px; font-size: 13px; min-height: 32px; }
+  .room-chip-label, .room-chip-remove { padding: 6px 10px; }
+  .room-chip-label { padding-left: 12px; }
+  .room-chip-remove { padding-right: 10px; }
+
+  /* Popup as bottom sheet */
+  .popup:not([hidden]) {
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    max-height: 75vh;
+    border-radius: 14px 14px 0 0;
+    border-bottom: none;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 -6px 20px rgba(20, 30, 50, 0.2);
+  }
+  .popup[hidden] { display: none; }
+  .popup::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 8px auto 0;
+    flex-shrink: 0;
+  }
+  .popup-header { padding: 8px 14px 10px; }
+  .popup-header button { padding: 8px 12px; font-size: 16px; }
+  .popup-body { overflow-y: auto; }
+  .popup-groups { max-height: none; }
+  .popup-footer button { padding: 10px 14px; }
+}
+
+/* Extra-narrow tweaks */
+@media (max-width: 480px) {
+  .map-controls .inline-label { font-size: 12px; }
+  .ship-logo { height: 24px; }
+  .section-title { font-size: 14px; }
 }

@@ -13,16 +13,18 @@
 <body>
 <header class="topbar">
   <div class="topbar-left">
+    <button id="sidebar-toggle" type="button" class="sidebar-toggle" aria-label="開啟分組面板" aria-expanded="false">☰</button>
     <img id="ship-logo" src="logo.png" alt="Disney Adventure" class="ship-logo">
   </div>
   <div class="topbar-right">
     <div class="offline-wrap">
-      <button id="offline-btn" type="button" title="把整個網頁下載到瀏覽器，沒網路也能用">📥 下載離線版</button>
+      <button id="offline-btn" type="button" title="把整個網頁下載到瀏覽器，沒網路也能用"><span class="btn-icon" aria-hidden="true">📥</span><span class="btn-text"> 下載離線版</span></button>
       <button id="offline-clear" type="button" class="offline-clear" title="清除已下載的離線版" hidden aria-label="清除離線版">✕</button>
     </div>
-    <button id="reset-btn" type="button" class="danger">清除全部</button>
+    <button id="reset-btn" type="button" class="danger"><span class="btn-text-full">清除全部</span><span class="btn-text-short" aria-hidden="true">清除</span></button>
   </div>
 </header>
+<div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
 
 <main class="layout">
   <aside class="sidebar" aria-label="分組面板">
@@ -67,7 +69,9 @@
         <label class="inline-label">Deck
           <select id="deck-select" aria-label="選擇樓層"></select>
         </label>
-        <input id="search" type="search" placeholder="跳到房號…" aria-label="跳到房號">
+        <label class="inline-label search-label">跳到
+          <input id="search" type="search" placeholder="房號…" aria-label="跳到房號">
+        </label>
         <label class="inline-label">主題
           <select id="theme-filter" aria-label="主題篩選"></select>
         </label>
