@@ -315,11 +315,7 @@ function renderGroups() {
   const list = document.getElementById('groups-list');
   list.innerHTML = '';
   if (state.groups.length === 0) {
-    const li = document.createElement('li');
-    li.className = 'hint';
-    li.textContent = '尚無分組。點「＋ 新增」開始。';
-    list.appendChild(li);
-    return;
+    return; // The big "新增分組" button above is the empty-state CTA.
   }
   for (const g of state.groups) {
     const li = document.createElement('li');

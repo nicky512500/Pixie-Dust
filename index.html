@@ -41,24 +41,22 @@
 <main class="layout">
   <aside class="sidebar" aria-label="分組面板">
     <section class="groups-section">
-      <div class="section-header">
-        <h2>分組</h2>
-        <button id="add-group" type="button" class="primary">＋ 新增</button>
-      </div>
+      <h2 class="section-title">① 分組</h2>
+      <button id="add-group" type="button" class="primary block-btn">＋ 新增分組</button>
       <ul id="groups-list" class="groups-list" aria-live="polite"></ul>
       <p class="hint" id="assign-hint">
-        提示：點分組左邊的圓點切換「指派模式」，亮起時點甲板圖上的房間 = 加入該組（再點 = 移出）。一間房可以同時屬於多個分組。
+        點分組左邊的圓點 → 進入「指派模式」→ 直接點地圖上的房間加入；再點移出。一間房可同時屬於多個分組。
       </p>
     </section>
 
     <section class="bulk-section">
-      <h2>批次輸入</h2>
-      <label>
+      <h2 class="section-title">② 批次輸入房號</h2>
+      <label class="field-label">
         房號（逗號 / 空白 / 換行分隔）
         <textarea id="bulk-input" rows="5" placeholder="10502, 10504&#10;10506 10508&#10;…"></textarea>
       </label>
       <div class="bulk-controls">
-        <label>指派到
+        <label class="inline-label">指派到
           <select id="bulk-group" aria-label="目標分組"></select>
         </label>
         <button id="bulk-assign" type="button" class="primary">加入分組</button>
@@ -68,7 +66,7 @@
     </section>
 
     <section class="legend-section">
-      <h2>圖例</h2>
+      <h2 class="section-title">圖例（房型基底色）</h2>
       <ul class="legend">
         <li><span class="swatch swatch-inside"></span>Inside（內艙）</li>
         <li><span class="swatch swatch-outside"></span>Oceanview（海景）</li>
