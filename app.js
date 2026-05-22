@@ -908,6 +908,15 @@ async function setupOffline() {
     return;
   }
 
+  // When a new SW takes over (e.g. after we deploy fresh assets), reload
+  // the page once so the user actually sees the new version.
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading) return;
+    reloading = true;
+    window.location.reload();
+  });
+
   const clearBtn = document.getElementById('offline-clear');
 
   // If the cache already exists, mark as ready.
