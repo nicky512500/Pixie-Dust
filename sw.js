@@ -1,7 +1,7 @@
 // Service worker for offline use on the cruise ship (no wifi).
 // Strategy: explicit user-triggered pre-cache + cache-first runtime.
 
-const CACHE = 'pixie-dust-v4';
+const CACHE = 'pixie-dust-v5';
 const ASSETS = [
   './',
   './index.html',
