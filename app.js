@@ -850,16 +850,17 @@ function applyZoom() {
 
 function fitZoom() {
   const scroll = document.getElementById('map-scroll');
-  const svg = document.querySelector('.map-stage svg');
-  if (!svg) return;
-  // Reference height: tallest Disney Adventure deck so the default zoom
-  // stays consistent across decks. Target ≈ showing 1/3 of the ship at
-  // a time, which lands around 50% on a 13" MacBook viewport (~660px),
-  // ~75% on a typical iMac, capped at 100% on very tall displays.
-  const REFERENCE_H = 3700;
-  const TARGET_FRACTION = 1 / 3;
-  const raw = scroll.clientHeight / (REFERENCE_H * TARGET_FRACTION);
-  state.zoom = Math.max(0.25, Math.min(1, raw));
+  if (!scroll) return;
+  // The ship SVG is tall and narrow (588 wide × ~3700 tall). Fit by width
+  // so the calculation doesn't depend on layout being fully settled.
+  // On desktop we let the ship occupy ~31% of the map area width; on
+  // narrow viewports (phones) we let it occupy more so it isn't lost
+  // in empty space.
+  const SVG_W = 588;
+  const w = scroll.clientWidth || window.innerWidth;
+  const targetOccupancy = w > 768 ? 0.31 : 0.8;
+  const raw = (w * targetOccupancy) / SVG_W;
+  state.zoom = Math.max(0.3, Math.min(1.2, raw));
   applyZoom();
 }
 
