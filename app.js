@@ -852,10 +852,14 @@ function fitZoom() {
   const scroll = document.getElementById('map-scroll');
   const svg = document.querySelector('.map-stage svg');
   if (!svg) return;
-  // Disney's SVG has style="height: NNNpx" — we want it to fit roughly in the viewport.
-  const viewportH = scroll.clientHeight - 48;
-  const svgH = parseFloat(svg.style.height) || svg.getBoundingClientRect().height;
-  state.zoom = Math.min(1, viewportH / svgH);
+  // Reference height: tallest Disney Adventure deck so the default zoom
+  // stays consistent across decks. Target ≈ showing 1/3 of the ship at
+  // a time, which lands around 50% on a 13" MacBook viewport (~660px),
+  // ~75% on a typical iMac, capped at 100% on very tall displays.
+  const REFERENCE_H = 3700;
+  const TARGET_FRACTION = 1 / 3;
+  const raw = scroll.clientHeight / (REFERENCE_H * TARGET_FRACTION);
+  state.zoom = Math.max(0.25, Math.min(1, raw));
   applyZoom();
 }
 
