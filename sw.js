@@ -1,7 +1,7 @@
 // Service worker for offline use on the cruise ship (no wifi).
 // Strategy: explicit user-triggered pre-cache + cache-first runtime.
 
-const CACHE = 'pixie-dust-v3';
+const CACHE = 'pixie-dust-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -26,24 +26,15 @@ self.addEventListener('activate', (e) => {
   })());
 });
 
-// Cache-first: serve from cache when present, otherwise hit network.
+// Serve from cache if explicitly pre-cached; otherwise straight to
+// network with NO opportunistic caching. The user opts in to offline
+// only by pressing the download button (which sends "cache-all" below).
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   e.respondWith((async () => {
     const cached = await caches.match(e.request);
     if (cached) return cached;
-    try {
-      const res = await fetch(e.request);
-      // Opportunistically cache successful same-origin responses.
-      if (res.ok && new URL(e.request.url).origin === self.location.origin) {
-        const cache = await caches.open(CACHE);
-        cache.put(e.request, res.clone());
-      }
-      return res;
-    } catch (err) {
-      // Offline & not cached — let the browser show its offline page.
-      throw err;
-    }
+    return fetch(e.request);
   })());
 });
 

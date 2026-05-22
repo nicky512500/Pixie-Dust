@@ -845,7 +845,18 @@ function applyZoom() {
   const svg = document.querySelector('.map-stage svg');
   if (!svg) return;
   svg.style.transform = `scale(${state.zoom})`;
-  document.getElementById('zoom-label').textContent = Math.round(state.zoom * 100) + '%';
+  const input = document.getElementById('zoom-value');
+  // Don't clobber the user's keystrokes while they're typing.
+  if (input && document.activeElement !== input) {
+    input.value = Math.round(state.zoom * 100);
+  }
+}
+
+function setZoomPercent(pct) {
+  const n = Number(pct);
+  if (!Number.isFinite(n)) return;
+  state.zoom = Math.max(0.1, Math.min(3, n / 100));
+  applyZoom();
 }
 
 function fitZoom() {
@@ -1062,8 +1073,17 @@ async function init() {
   });
   noteEl.addEventListener('blur', () => { clearTimeout(noteTimer); saveNote(); });
   document.getElementById('zoom-in').addEventListener('click', () => { state.zoom = Math.min(3, state.zoom * 1.2); applyZoom(); });
-  document.getElementById('zoom-out').addEventListener('click', () => { state.zoom = Math.max(0.2, state.zoom / 1.2); applyZoom(); });
+  document.getElementById('zoom-out').addEventListener('click', () => { state.zoom = Math.max(0.1, state.zoom / 1.2); applyZoom(); });
   document.getElementById('zoom-reset').addEventListener('click', fitZoom);
+  const zoomInput = document.getElementById('zoom-value');
+  zoomInput.addEventListener('input', () => setZoomPercent(zoomInput.value));
+  zoomInput.addEventListener('change', () => {
+    // Re-sync if user typed something out of range
+    zoomInput.value = Math.round(state.zoom * 100);
+  });
+  zoomInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') zoomInput.blur();
+  });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closePopup();
   });

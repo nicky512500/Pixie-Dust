@@ -81,7 +81,8 @@
       <span id="deck-info" class="deck-info"></span>
       <div class="zoom-controls">
         <button id="zoom-out" type="button" aria-label="縮小">−</button>
-        <span id="zoom-label">100%</span>
+        <input id="zoom-value" type="number" min="10" max="300" step="5" inputmode="numeric" aria-label="縮放百分比">
+        <span class="zoom-suffix">%</span>
         <button id="zoom-in" type="button" aria-label="放大">＋</button>
         <button id="zoom-reset" type="button">適合畫面</button>
       </div>

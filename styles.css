@@ -285,7 +285,16 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
 .deck-info { color: var(--text-dim); font-size: 13px; }
 .zoom-controls { display: flex; align-items: center; gap: 6px; }
 .zoom-controls button { padding: 4px 10px; }
-#zoom-label { min-width: 3.5em; text-align: center; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+#zoom-value {
+  width: 4.5em;
+  padding: 4px 6px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+}
+#zoom-value::-webkit-outer-spin-button,
+#zoom-value::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.zoom-suffix { color: var(--text-dim); margin-left: -2px; }
 
 .map-scroll { flex: 1; overflow: auto; background: var(--bg); }
 .map-stage {
