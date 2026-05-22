@@ -1026,7 +1026,6 @@ async function init() {
     renderPopupGroupSelect();
   });
   document.getElementById('bulk-assign').addEventListener('click', () => doBulkAssign(false));
-  document.getElementById('bulk-remove').addEventListener('click', () => doBulkAssign(true));
   document.getElementById('theme-filter').addEventListener('change', refreshFilter);
   document.getElementById('category-filter').addEventListener('change', refreshFilter);
   document.getElementById('reset-btn').addEventListener('click', () => {

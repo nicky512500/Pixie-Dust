@@ -14,22 +14,8 @@
 <header class="topbar">
   <div class="topbar-left">
     <img id="ship-logo" src="logo.png" alt="Disney Adventure" class="ship-logo">
-    <label>Deck
-      <select id="deck-select" aria-label="選擇樓層"></select>
-    </label>
   </div>
   <div class="topbar-right">
-    <input id="search" type="search" placeholder="跳到房號…" aria-label="跳到房號">
-    <label>主題
-      <select id="theme-filter" aria-label="主題篩選"></select>
-    </label>
-    <label>類別
-      <select id="category-filter" aria-label="類別篩選"></select>
-    </label>
-    <div id="filter-chip" class="filter-chip" hidden>
-      <span id="filter-chip-text"></span>
-      <button id="filter-chip-clear" type="button" aria-label="清除篩選">✕</button>
-    </div>
     <div class="offline-wrap">
       <button id="offline-btn" type="button" title="把整個網頁下載到瀏覽器，沒網路也能用">📥 下載離線版</button>
       <button id="offline-clear" type="button" class="offline-clear" title="清除已下載的離線版" hidden aria-label="清除離線版">✕</button>
@@ -60,7 +46,6 @@
           <select id="bulk-group" aria-label="目標分組"></select>
         </label>
         <button id="bulk-assign" type="button" class="primary">加入分組</button>
-        <button id="bulk-remove" type="button">從此組移除</button>
       </div>
       <p class="bulk-feedback" id="bulk-feedback"></p>
     </section>
@@ -78,7 +63,22 @@
 
   <section class="map-area">
     <div class="map-toolbar">
-      <span id="deck-info" class="deck-info"></span>
+      <div class="map-controls">
+        <label class="inline-label">Deck
+          <select id="deck-select" aria-label="選擇樓層"></select>
+        </label>
+        <input id="search" type="search" placeholder="跳到房號…" aria-label="跳到房號">
+        <label class="inline-label">主題
+          <select id="theme-filter" aria-label="主題篩選"></select>
+        </label>
+        <label class="inline-label">類別
+          <select id="category-filter" aria-label="類別篩選"></select>
+        </label>
+        <div id="filter-chip" class="filter-chip" hidden>
+          <span id="filter-chip-text"></span>
+          <button id="filter-chip-clear" type="button" aria-label="清除篩選">✕</button>
+        </div>
+      </div>
       <div class="zoom-controls">
         <button id="zoom-out" type="button" aria-label="縮小">−</button>
         <input id="zoom-value" type="number" min="10" max="300" step="5" inputmode="numeric" aria-label="縮放百分比">
@@ -87,6 +87,7 @@
         <button id="zoom-reset" type="button">適合畫面</button>
       </div>
     </div>
+    <div id="deck-info" class="deck-info"></div>
     <div class="map-scroll" id="map-scroll">
       <div class="map-stage" id="map-stage">
         <!-- Disney SVG injected here -->
