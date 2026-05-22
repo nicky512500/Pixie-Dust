@@ -1,0 +1,18 @@
+{
+  "name": "Disney Adventure 房間分組",
+  "short_name": "Disney Rooms",
+  "description": "Disney Adventure 郵輪房間分組工具（可離線）",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#3b8fe0",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

@@ -881,6 +881,75 @@ function escapeHtml(s) {
   return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// ---------- Offline / service worker ----------
+
+async function setupOffline() {
+  const btn = document.getElementById('offline-btn');
+  if (!('serviceWorker' in navigator)) {
+    btn.disabled = true;
+    btn.textContent = '此瀏覽器不支援離線';
+    btn.title = '請改用 Chrome / Safari / Edge';
+    return;
+  }
+  // Service workers require HTTPS (or localhost). On file:// they no-op.
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    btn.disabled = true;
+    btn.textContent = '離線需 HTTPS';
+    return;
+  }
+
+  let reg;
+  try {
+    reg = await navigator.serviceWorker.register('./sw.js');
+  } catch (e) {
+    btn.disabled = true;
+    btn.textContent = '離線設定失敗';
+    btn.title = String(e);
+    return;
+  }
+
+  // If the cache already exists, mark as ready.
+  if ('caches' in window) {
+    const cached = await caches.match('./rooms.json');
+    if (cached) markOfflineReady(btn);
+  }
+
+  btn.addEventListener('click', async () => {
+    const sw = navigator.serviceWorker.controller || (await navigator.serviceWorker.ready).active;
+    if (!sw) {
+      showToast('Service worker 還沒啟動，1 秒後再試', true);
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = '下載中… 0%';
+    const onMsg = (ev) => {
+      const d = ev.data;
+      if (!d) return;
+      if (d.type === 'cache-progress') {
+        btn.textContent = `下載中… ${Math.round(d.done / d.total * 100)}%`;
+      } else if (d.type === 'cache-done') {
+        navigator.serviceWorker.removeEventListener('message', onMsg);
+        markOfflineReady(btn);
+        showToast('離線版已就緒，可關閉網路使用');
+      } else if (d.type === 'cache-error') {
+        navigator.serviceWorker.removeEventListener('message', onMsg);
+        btn.disabled = false;
+        btn.textContent = '📥 下載離線版';
+        showToast(`下載失敗：${d.url}`, true);
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', onMsg);
+    sw.postMessage({ type: 'cache-all' });
+  });
+}
+
+function markOfflineReady(btn) {
+  btn.disabled = false;
+  btn.textContent = '✓ 離線版已就緒';
+  btn.classList.add('offline-ready');
+  btn.title = '已將整個網頁下載到瀏覽器。沒網路也能打開這個網址（前提是瀏覽器分頁有開過）。再點一次重新下載最新版。';
+}
+
 // ---------- Boot ----------
 
 async function init() {
@@ -966,6 +1035,8 @@ async function init() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closePopup();
   });
+
+  setupOffline();
 }
 
 init();
