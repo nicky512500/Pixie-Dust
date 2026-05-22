@@ -5,3 +5,7 @@
 # needed to (re)generate rooms.json. The committed rooms.json already
 # contains the processed data the site needs.
 data/raw/
+
+# Local-only — not needed to serve the webpage.
+README.md
+scripts/
