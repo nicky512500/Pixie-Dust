@@ -798,8 +798,18 @@ function doSearch(rawInput) {
   const el = document.getElementById(`room-${q}`);
   if (el) {
     el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-    openPopup(q, el);
+    flashSearchJump(el);
   }
+}
+
+function flashSearchJump(el) {
+  const stage = document.getElementById('map-stage');
+  if (stage) {
+    stage.querySelectorAll('.search-jump').forEach(e => e.classList.remove('search-jump'));
+  }
+  // Force reflow so re-adding the class restarts the pulse animation.
+  void el.offsetWidth;
+  el.classList.add('search-jump');
 }
 
 function refreshFilter() {

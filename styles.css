@@ -386,6 +386,18 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
   fill-opacity: 0.95 !important;
 }
 
+/* Single-room jump from the search box: pulse then stay highlighted */
+.map-stage [id^="room-"].search-jump {
+  stroke: #d49b1c !important;
+  stroke-width: 3 !important;
+  fill-opacity: 0.95 !important;
+  animation: search-pulse 0.6s ease-in-out 3;
+}
+@keyframes search-pulse {
+  0%, 100% { fill-opacity: 0.95; stroke-width: 3; }
+  50%      { fill-opacity: 0.4;  stroke-width: 6; }
+}
+
 /* Active (popup open) */
 .map-stage [id^="room-"].active {
   stroke: #1a2333 !important;
@@ -486,6 +498,15 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
 
 /* ---------- Mobile ---------- */
 @media (max-width: 900px) {
+  /* Prevent iOS Safari auto-zoom on focus — any text input < 16px triggers it. */
+  input:not([type]),
+  input[type="text"],
+  input[type="search"],
+  input[type="number"],
+  textarea {
+    font-size: 16px;
+  }
+
   /* Topbar: compact */
   .topbar { padding: 8px 12px; gap: 8px; }
   .topbar-left { gap: 8px; }
