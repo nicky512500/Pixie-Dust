@@ -17,6 +17,8 @@
     <img id="ship-logo" src="logo.png" alt="Disney Adventure" class="ship-logo">
   </div>
   <div class="topbar-right">
+    <span id="sync-status" class="sync-status" hidden></span>
+    <button id="login-btn" type="button" title="登入以多裝置同步" aria-label="登入"><span class="btn-icon" aria-hidden="true">👤</span><span class="btn-text"> 登入</span></button>
     <div class="offline-wrap">
       <button id="offline-btn" type="button" title="把整個網頁下載到瀏覽器，沒網路也能用"><span class="btn-icon" aria-hidden="true">📥</span><span class="btn-text"> 下載離線版</span></button>
       <button id="offline-clear" type="button" class="offline-clear" title="清除已下載的離線版" hidden aria-label="清除離線版">✕</button>
@@ -41,8 +43,10 @@
       <h2 class="section-title">② 批次輸入房號</h2>
       <label class="field-label">
         房號（逗號 / 空白 / 換行分隔）
-        <textarea id="bulk-input" rows="5" placeholder="10502, 10504&#10;10506 10508&#10;…"></textarea>
+        <textarea id="bulk-input" rows="5" placeholder=" "></textarea>
       </label>
+      <pre class="bulk-example" aria-hidden="true">例：10502, 10504
+　　10506 10508</pre>
       <div class="bulk-controls">
         <label class="inline-label">指派到
           <select id="bulk-group" aria-label="目標分組"></select>
@@ -119,6 +123,61 @@
 
 <div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
 
+<div id="login-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="login-title">
+  <div class="modal-backdrop" data-modal-close></div>
+  <div class="modal-panel">
+    <header class="modal-header">
+      <h3 id="login-title">登入 / 註冊</h3>
+      <button class="modal-close" type="button" data-modal-close aria-label="關閉">✕</button>
+    </header>
+    <div class="modal-body">
+      <div id="login-signedout">
+        <div class="login-tabs" role="tablist">
+          <button type="button" class="login-tab active" data-tab="signin" role="tab" aria-selected="true">登入</button>
+          <button type="button" class="login-tab" data-tab="signup" role="tab" aria-selected="false">註冊</button>
+        </div>
+        <form id="login-form" autocomplete="on">
+          <label class="field-label">Email
+            <input id="login-email" type="email" required autocomplete="email">
+          </label>
+          <label class="field-label">密碼
+            <input id="login-password" type="password" required autocomplete="current-password" minlength="6">
+          </label>
+          <p id="login-error" class="login-error" hidden></p>
+          <p id="login-info" class="login-info" hidden></p>
+          <button id="login-submit" type="submit" class="primary block-btn">登入</button>
+          <button id="forgot-password" type="button" class="link-btn">忘記密碼？</button>
+        </form>
+        <p class="login-hint">登入後資料會自動同步到雲端，多裝置共用。沒登入也可以照常使用（純存本機）。</p>
+      </div>
+      <div id="login-signedin" hidden>
+        <p>已登入：<strong id="login-user-email"></strong></p>
+        <p id="login-sync-info" class="login-hint"></p>
+        <button id="logout-btn" type="button" class="danger block-btn">登出</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="conflict-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="conflict-title">
+  <div class="modal-backdrop"></div>
+  <div class="modal-panel">
+    <header class="modal-header">
+      <h3 id="conflict-title">本機與雲端都有資料</h3>
+    </header>
+    <div class="modal-body">
+      <p>你的瀏覽器和登入帳號各自都有資料。要怎麼處理？</p>
+      <div id="conflict-stats" class="conflict-stats"></div>
+      <div class="conflict-actions">
+        <button id="conflict-upload" type="button" class="primary block-btn">上傳本機（覆蓋雲端）</button>
+        <button id="conflict-download" type="button" class="block-btn">下載雲端（覆蓋本機）</button>
+        <button id="conflict-merge" type="button" class="block-btn">合併（兩邊都保留）</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="firebase-config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

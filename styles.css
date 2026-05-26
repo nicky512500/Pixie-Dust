@@ -283,6 +283,18 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
 .room-chip-remove:hover { color: var(--danger); }
 
 /* Bulk input */
+.bulk-example {
+  margin: 4px 0 0;
+  padding: 6px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre;
+}
 .bulk-controls { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
 .bulk-feedback { margin: 6px 0 0; font-size: 12px; color: var(--text-dim); min-height: 1.3em; white-space: pre-line; }
 .bulk-feedback.error { color: var(--danger); }
@@ -484,6 +496,113 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
 
 .popup-footer { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); background: var(--panel-soft); justify-content: flex-end; }
 
+/* Login / sync */
+.sync-status {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.sync-status.error { color: var(--danger); }
+.sync-status.ok    { color: var(--ok); }
+#login-btn.signed-in { background: #e6f5ec; border-color: #9ed8bf; color: #1f7a4e; }
+#login-btn.signed-in:hover { background: #d6efe0; }
+
+/* Generic modal (login + conflict dialogs) */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal[hidden] { display: none; }
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 30, 50, 0.5);
+}
+.modal-panel {
+  position: relative;
+  background: var(--panel);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  width: 100%;
+  max-width: 380px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h3 { margin: 0; font-size: 16px; }
+.modal-close { padding: 4px 10px; }
+.modal-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+.login-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.login-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 8px 16px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.login-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.login-tab:hover { background: var(--panel-soft); }
+
+#login-form { display: flex; flex-direction: column; gap: 10px; }
+.login-error {
+  margin: 0;
+  padding: 8px 10px;
+  background: #fbeeee;
+  color: var(--danger);
+  border-radius: 4px;
+  font-size: 13px;
+}
+.login-info {
+  margin: 0;
+  padding: 8px 10px;
+  background: #e6f5ec;
+  color: #1f7a4e;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.login-hint { margin: 0; font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+.link-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  padding: 4px;
+  align-self: center;
+}
+.link-btn:hover { background: transparent; text-decoration: underline; }
+
+.conflict-stats {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.conflict-actions { display: flex; flex-direction: column; gap: 8px; }
+
 /* Toast */
 .toast {
   position: fixed;
@@ -524,8 +643,11 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
   .sidebar-toggle { display: inline-flex; align-items: center; justify-content: center; }
   .topbar-right { gap: 6px; }
   .topbar-right button { padding: 8px 10px; font-size: 13px; }
-  #offline-btn .btn-text { display: none; }
-  #offline-btn { padding: 8px 10px; font-size: 16px; line-height: 1; }
+  #offline-btn .btn-text,
+  #login-btn .btn-text { display: none; }
+  #offline-btn,
+  #login-btn { padding: 8px 10px; font-size: 16px; line-height: 1; }
+  .sync-status { font-size: 11px; max-width: 60px; overflow: hidden; text-overflow: ellipsis; }
   #reset-btn .btn-text-full { display: none; }
   #reset-btn .btn-text-short { display: inline; }
 

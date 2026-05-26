@@ -52,7 +52,7 @@ function loadPersisted() {
   }
 }
 
-function persist() {
+function serializeState() {
   const rooms = {};
   for (const [roomId, set] of state.roomGroups) {
     if (set.size > 0) rooms[roomId] = [...set];
@@ -61,9 +61,12 @@ function persist() {
   for (const [roomId, text] of state.roomNotes) {
     if (text) notes[roomId] = text;
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
-    groups: state.groups, rooms, notes,
-  }));
+  return { groups: state.groups, rooms, notes };
+}
+
+function persist() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+  scheduleCloudWrite();
 }
 
 function setRoomNote(roomId, text) {
@@ -1071,6 +1074,390 @@ function markOfflineReady(btn, clearBtn) {
   if (clearBtn) clearBtn.hidden = false;
 }
 
+// ---------- Cloud sync (Firebase) ----------
+
+const FIREBASE_VER = '11.1.0';
+let fb = null;             // { initializeApp, getAuth, ... } namespaces
+let fbAuth = null;
+let fbDb = null;
+let fbDocRef = null;
+let currentUser = null;
+let cloudUnsub = null;
+let cloudWriteTimer = null;
+let initialSyncDone = false;
+let suppressCloudWrite = false;  // when applying remote data → don't echo back
+
+let syncStatusTimer = null;
+function showSyncStatus(msg, ttlMs = 0, kind = '') {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'sync-status' + (kind ? ' ' + kind : '');
+  el.hidden = !msg;
+  clearTimeout(syncStatusTimer);
+  if (ttlMs > 0) {
+    syncStatusTimer = setTimeout(() => { el.hidden = true; }, ttlMs);
+  }
+}
+
+async function setupFirebase() {
+  if (!window.firebaseConfig) return;
+  try {
+    const [appMod, authMod, fsMod] = await Promise.all([
+      import(`https://www.gstatic.com/firebasejs/${FIREBASE_VER}/firebase-app.js`),
+      import(`https://www.gstatic.com/firebasejs/${FIREBASE_VER}/firebase-auth.js`),
+      import(`https://www.gstatic.com/firebasejs/${FIREBASE_VER}/firebase-firestore.js`),
+    ]);
+    fb = { ...appMod, ...authMod, ...fsMod };
+    const app = fb.initializeApp(window.firebaseConfig);
+    fbAuth = fb.getAuth(app);
+    fbDb = fb.getFirestore(app);
+    fb.onAuthStateChanged(fbAuth, handleAuthChange);
+  } catch (e) {
+    console.warn('Firebase setup failed', e);
+    const loginBtn = document.getElementById('login-btn');
+    if (loginBtn) { loginBtn.disabled = true; loginBtn.title = '無法載入登入功能'; }
+  }
+}
+
+async function handleAuthChange(user) {
+  currentUser = user;
+  initialSyncDone = false;
+  updateLoginUi();
+  if (cloudUnsub) { cloudUnsub(); cloudUnsub = null; }
+  clearTimeout(cloudWriteTimer);
+  if (!user) { showSyncStatus(''); return; }
+  fbDocRef = fb.doc(fbDb, 'rooms_data', user.uid);
+  showSyncStatus('同步中…');
+  try {
+    const snap = await fb.getDoc(fbDocRef);
+    await resolveInitialSync(snap.exists() ? snap.data() : null);
+  } catch (e) {
+    console.warn('initial sync failed', e);
+    showSyncStatus('同步失敗', 4000, 'error');
+  }
+  // After initial sync, subscribe for remote updates from other devices.
+  cloudUnsub = fb.onSnapshot(fbDocRef, handleRemoteUpdate, (e) => {
+    console.warn('snapshot listener error', e);
+    showSyncStatus('離線', 0, 'error');
+  });
+  initialSyncDone = true;
+}
+
+function hasLocalData() {
+  return state.groups.length > 0 || state.roomGroups.size > 0 || state.roomNotes.size > 0;
+}
+function hasCloudData(data) {
+  if (!data) return false;
+  const g = Array.isArray(data.groups) && data.groups.length > 0;
+  const r = data.rooms && Object.keys(data.rooms).length > 0;
+  const n = data.notes && Object.keys(data.notes).length > 0;
+  return !!(g || r || n);
+}
+
+// Canonical JSON form for equality comparisons. Recursively sorts object
+// keys and array members of group-id sets so two functionally identical
+// states stringify to the same value regardless of insertion order
+// (Firestore reshuffles field order when it hands docs back).
+function stableStringify(v) {
+  if (Array.isArray(v)) return '[' + v.map(stableStringify).join(',') + ']';
+  if (v && typeof v === 'object') {
+    return '{' + Object.keys(v).sort().map(
+      k => JSON.stringify(k) + ':' + stableStringify(v[k])
+    ).join(',') + '}';
+  }
+  return JSON.stringify(v);
+}
+
+function canonicalDataString(d) {
+  const groups = (d.groups || []).slice().sort(
+    (a, b) => String(a.id).localeCompare(String(b.id))
+  );
+  const rooms = {};
+  for (const k of Object.keys(d.rooms || {}).sort()) {
+    rooms[k] = [...(d.rooms[k] || [])].sort();
+  }
+  const notes = {};
+  for (const k of Object.keys(d.notes || {}).sort()) {
+    notes[k] = d.notes[k];
+  }
+  return stableStringify({ groups, rooms, notes });
+}
+
+async function resolveInitialSync(cloudData) {
+  const localHas = hasLocalData();
+  const cloudHas = hasCloudData(cloudData);
+  if (!localHas && !cloudHas) { showSyncStatus('已同步', 2000, 'ok'); return; }
+  if (localHas && !cloudHas)  { await writeCloudNow(); return; }
+  if (!localHas && cloudHas)  { applyCloudData(cloudData); showSyncStatus('已同步', 2000, 'ok'); return; }
+  // Both have data — if they're already identical (typical refresh case),
+  // there's nothing to resolve. Only ask the user when they actually diverge.
+  const localStr = canonicalDataString(serializeState());
+  const cloudStr = canonicalDataString(cloudData);
+  if (localStr === cloudStr) {
+    showSyncStatus('已同步', 2000, 'ok');
+    return;
+  }
+  console.log('[sync] divergence — LOCAL:', localStr);
+  console.log('[sync] divergence — CLOUD:', cloudStr);
+  showConflictDialog(cloudData);
+}
+
+function applyCloudData(data) {
+  state.groups = Array.isArray(data.groups) ? data.groups : [];
+  state.roomGroups = new Map();
+  if (data.rooms) {
+    for (const [roomId, ids] of Object.entries(data.rooms)) {
+      if (Array.isArray(ids) && ids.length > 0) state.roomGroups.set(roomId, new Set(ids));
+    }
+  }
+  state.roomNotes = new Map();
+  if (data.notes) {
+    for (const [roomId, text] of Object.entries(data.notes)) {
+      if (typeof text === 'string' && text) state.roomNotes.set(roomId, text);
+    }
+  }
+  // Persist to localStorage without re-uploading.
+  suppressCloudWrite = true;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+  suppressCloudWrite = false;
+  // Re-render everything that displays group/room/note state.
+  renderGroups();
+  renderBulkGroupSelect();
+  renderPopupGroupSelect();
+  if (state.currentDeck != null) repaintCurrentDeck();
+  if (popupRoomId) renderPopupGroupCheckboxes(popupRoomId);
+}
+
+function mergeCloudData(cloudData) {
+  // Union semantics: every group, every room→groupIds, every note from both
+  // sides survive. Notes that conflict prefer the longer text.
+  const cloudGroups = Array.isArray(cloudData.groups) ? cloudData.groups : [];
+  const byId = new Map(state.groups.map(g => [g.id, g]));
+  for (const cg of cloudGroups) if (!byId.has(cg.id)) state.groups.push(cg);
+  if (cloudData.rooms) {
+    for (const [roomId, ids] of Object.entries(cloudData.rooms)) {
+      if (!Array.isArray(ids)) continue;
+      const set = state.roomGroups.get(roomId) || new Set();
+      for (const id of ids) set.add(id);
+      if (set.size > 0) state.roomGroups.set(roomId, set);
+    }
+  }
+  if (cloudData.notes) {
+    for (const [roomId, text] of Object.entries(cloudData.notes)) {
+      if (typeof text !== 'string' || !text) continue;
+      const cur = state.roomNotes.get(roomId);
+      if (!cur || text.length > cur.length) state.roomNotes.set(roomId, text);
+    }
+  }
+}
+
+function showConflictDialog(cloudData) {
+  const modal = document.getElementById('conflict-modal');
+  const stats = document.getElementById('conflict-stats');
+  const localG = state.groups.length;
+  const localR = state.roomGroups.size;
+  const localN = state.roomNotes.size;
+  const cloudG = (cloudData.groups || []).length;
+  const cloudR = cloudData.rooms ? Object.keys(cloudData.rooms).length : 0;
+  const cloudN = cloudData.notes ? Object.keys(cloudData.notes).length : 0;
+  stats.innerHTML =
+    `<div><b>本機：</b>${localG} 個分組 · ${localR} 間房有指派 · ${localN} 則備註</div>` +
+    `<div><b>雲端：</b>${cloudG} 個分組 · ${cloudR} 間房有指派 · ${cloudN} 則備註</div>`;
+  modal.hidden = false;
+
+  const close = () => { modal.hidden = true; };
+  const onUpload = async () => {
+    close();
+    await writeCloudNow();
+    showSyncStatus('已同步', 2000, 'ok');
+  };
+  const onDownload = () => {
+    close();
+    applyCloudData(cloudData);
+    showSyncStatus('已同步', 2000, 'ok');
+  };
+  const onMerge = async () => {
+    close();
+    mergeCloudData(cloudData);
+    suppressCloudWrite = true;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+    suppressCloudWrite = false;
+    renderGroups();
+    renderBulkGroupSelect();
+    renderPopupGroupSelect();
+    if (state.currentDeck != null) repaintCurrentDeck();
+    await writeCloudNow();
+    showSyncStatus('已同步', 2000, 'ok');
+  };
+  // Wire once; remove old handlers via clone-and-replace.
+  for (const id of ['conflict-upload', 'conflict-download', 'conflict-merge']) {
+    const old = document.getElementById(id);
+    const fresh = old.cloneNode(true);
+    old.replaceWith(fresh);
+  }
+  document.getElementById('conflict-upload').addEventListener('click', onUpload);
+  document.getElementById('conflict-download').addEventListener('click', onDownload);
+  document.getElementById('conflict-merge').addEventListener('click', onMerge);
+}
+
+function handleRemoteUpdate(snap) {
+  if (!snap.exists()) return;
+  // Skip our own pending local writes echoing back.
+  if (snap.metadata.hasPendingWrites) return;
+  if (!initialSyncDone) return;  // initial pull is handled separately
+  applyCloudData(snap.data());
+  showSyncStatus('已同步', 2000, 'ok');
+}
+
+function scheduleCloudWrite() {
+  if (!currentUser || !fbDocRef || suppressCloudWrite) return;
+  clearTimeout(cloudWriteTimer);
+  showSyncStatus('儲存中…');
+  cloudWriteTimer = setTimeout(writeCloudNow, 1500);
+}
+
+async function writeCloudNow() {
+  if (!currentUser || !fbDocRef) return;
+  clearTimeout(cloudWriteTimer);
+  const payload = serializeState();
+  try {
+    await fb.setDoc(fbDocRef, { ...payload, updatedAt: fb.serverTimestamp() });
+    showSyncStatus('已同步', 2000, 'ok');
+  } catch (e) {
+    console.warn('cloud write failed', e);
+    showSyncStatus('同步失敗', 4000, 'error');
+  }
+}
+
+// ---------- Login UI ----------
+
+function updateLoginUi() {
+  const btn = document.getElementById('login-btn');
+  const signedOut = document.getElementById('login-signedout');
+  const signedIn = document.getElementById('login-signedin');
+  if (currentUser) {
+    btn.classList.add('signed-in');
+    btn.title = `已登入：${currentUser.email}`;
+    btn.querySelector('.btn-text').textContent = ' ' + currentUser.email.split('@')[0];
+    document.getElementById('login-user-email').textContent = currentUser.email;
+    signedOut.hidden = true;
+    signedIn.hidden = false;
+  } else {
+    btn.classList.remove('signed-in');
+    btn.title = '登入以多裝置同步';
+    btn.querySelector('.btn-text').textContent = ' 登入';
+    signedOut.hidden = false;
+    signedIn.hidden = true;
+  }
+}
+
+function openLoginModal() { document.getElementById('login-modal').hidden = false; }
+function closeLoginModal() {
+  document.getElementById('login-modal').hidden = true;
+  document.getElementById('login-error').hidden = true;
+}
+
+function switchLoginTab(tab) {
+  document.querySelectorAll('.login-tab').forEach(el => {
+    const active = el.dataset.tab === tab;
+    el.classList.toggle('active', active);
+    el.setAttribute('aria-selected', String(active));
+  });
+  const submit = document.getElementById('login-submit');
+  const pw = document.getElementById('login-password');
+  if (tab === 'signup') {
+    submit.textContent = '註冊';
+    pw.autocomplete = 'new-password';
+  } else {
+    submit.textContent = '登入';
+    pw.autocomplete = 'current-password';
+  }
+  submit.dataset.mode = tab;
+  document.getElementById('forgot-password').hidden = tab === 'signup';
+  document.getElementById('login-error').hidden = true;
+  document.getElementById('login-info').hidden = true;
+}
+
+async function handleLoginSubmit(e) {
+  e.preventDefault();
+  if (!fbAuth) return;
+  const mode = document.getElementById('login-submit').dataset.mode || 'signin';
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const err = document.getElementById('login-error');
+  err.hidden = true;
+  const submit = document.getElementById('login-submit');
+  submit.disabled = true;
+  try {
+    if (mode === 'signup') {
+      await fb.createUserWithEmailAndPassword(fbAuth, email, password);
+    } else {
+      await fb.signInWithEmailAndPassword(fbAuth, email, password);
+    }
+    closeLoginModal();
+  } catch (e2) {
+    err.textContent = friendlyAuthError(e2);
+    err.hidden = false;
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+function friendlyAuthError(e) {
+  const code = e && e.code || '';
+  const map = {
+    'auth/invalid-email': 'Email 格式不正確',
+    'auth/missing-password': '請輸入密碼',
+    'auth/weak-password': '密碼至少 6 位數',
+    'auth/email-already-in-use': '這個 Email 已註冊，請改用「登入」',
+    'auth/invalid-credential': 'Email 或密碼錯誤',
+    'auth/user-not-found': '找不到這個帳號',
+    'auth/wrong-password': '密碼錯誤',
+    'auth/too-many-requests': '失敗次數太多，請稍後再試',
+    'auth/network-request-failed': '網路連線失敗',
+  };
+  return map[code] || (e && e.message) || '登入失敗';
+}
+
+async function handleLogout() {
+  if (!fbAuth) return;
+  try { await fb.signOut(fbAuth); closeLoginModal(); }
+  catch (e) { console.warn('signOut failed', e); }
+}
+
+async function handleForgotPassword() {
+  if (!fbAuth) return;
+  const email = document.getElementById('login-email').value.trim();
+  const err = document.getElementById('login-error');
+  const info = document.getElementById('login-info');
+  err.hidden = true; info.hidden = true;
+  if (!email) {
+    err.textContent = '請先在上方填入你的 Email';
+    err.hidden = false;
+    return;
+  }
+  try {
+    await fb.sendPasswordResetEmail(fbAuth, email);
+    info.textContent = `已寄出重設密碼信到 ${email}，請收信。`;
+    info.hidden = false;
+  } catch (e) {
+    err.textContent = friendlyAuthError(e);
+    err.hidden = false;
+  }
+}
+
+function wireLoginUi() {
+  document.getElementById('login-btn').addEventListener('click', openLoginModal);
+  document.querySelectorAll('[data-modal-close]').forEach(el => el.addEventListener('click', closeLoginModal));
+  document.querySelectorAll('.login-tab').forEach(el => {
+    el.addEventListener('click', () => switchLoginTab(el.dataset.tab));
+  });
+  document.getElementById('login-form').addEventListener('submit', handleLoginSubmit);
+  document.getElementById('logout-btn').addEventListener('click', handleLogout);
+  document.getElementById('forgot-password').addEventListener('click', handleForgotPassword);
+}
+
 // ---------- Boot ----------
 
 async function init() {
@@ -1213,6 +1600,8 @@ async function init() {
   });
 
   setupOffline();
+  wireLoginUi();
+  setupFirebase();
 }
 
 init();
