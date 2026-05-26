@@ -523,11 +523,16 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
   #reset-btn .btn-text-full { display: none; }
   #reset-btn .btn-text-short { display: inline; }
 
-  /* Sidebar as slide-in drawer */
+  /* Sidebar is fixed/out-of-flow on mobile, so the grid isn't doing
+     useful work — and the 1fr column + fixed-child combo miscomputes
+     row heights on older iOS Safari (≤15), collapsing the map area
+     to 0 px and blanking the SVG. Drop to block flow and let
+     .map-area fill the parent height explicitly. */
   .layout {
-    grid-template-columns: 1fr;
+    display: block;
     position: relative;
   }
+  .map-area { height: 100%; }
   .sidebar {
     position: fixed;
     top: 0; left: 0; bottom: 0;
