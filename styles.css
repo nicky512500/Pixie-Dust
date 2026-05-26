@@ -350,6 +350,12 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
   background: #ffffff;
   border-radius: 4px;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+  /* Disney's SVGs ship without a width attr but with an inline pixel
+     height. Pin width explicitly so older iOS Safari (≤15) can
+     compute a definite size — without this they collapse to 0×0
+     and the map area renders blank. */
+  width: 588px;
+  max-width: none;
   height: auto !important;
   transform-origin: top center;
 }

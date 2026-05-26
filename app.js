@@ -213,6 +213,11 @@ function showDeck(deckNum) {
   state.currentDeck = deckNum;
   const stage = document.getElementById('map-stage');
   stage.innerHTML = d.svg;
+  // Disney ships SVGs with an inline `style="height: …px"` that fights
+  // our CSS sizing on older iOS Safari. Drop it so SVG falls back to
+  // viewBox-aspect auto height.
+  const svgEl = stage.querySelector('svg');
+  if (svgEl) svgEl.removeAttribute('style');
   renderDeckInfo();
   attachRoomHandlers();
   repaintCurrentDeck();
