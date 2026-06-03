@@ -14,13 +14,17 @@
 <header class="topbar">
   <div class="topbar-left">
     <button id="sidebar-toggle" type="button" class="sidebar-toggle" aria-label="開啟分組面板" aria-expanded="false">☰</button>
-    <img id="ship-logo" src="logo.png" alt="Disney Adventure" class="ship-logo">
+    <button id="ship-switcher" type="button" class="ship-switcher" aria-label="切換郵輪" title="切換郵輪">
+      <img class="ship-switcher-logo" src="logo.png" alt="">
+      <span id="ship-switcher-name" class="ship-switcher-name"></span>
+      <span class="ship-switcher-chevron" aria-hidden="true">▾</span>
+    </button>
   </div>
   <div class="topbar-right">
     <span id="sync-status" class="sync-status" hidden></span>
     <button id="login-btn" type="button" title="登入以多裝置同步" aria-label="登入"><span class="btn-icon" aria-hidden="true">👤</span><span class="btn-text"> 登入</span></button>
     <div class="offline-wrap">
-      <button id="offline-btn" type="button" title="把整個網頁下載到瀏覽器，沒網路也能用"><span class="btn-icon" aria-hidden="true">📥</span><span class="btn-text"> 下載離線版</span></button>
+      <button id="offline-btn" type="button" title="把此船的網頁與資料下載到瀏覽器，沒網路也能用"><span class="btn-icon" aria-hidden="true">📥</span><span class="btn-text"> 下載此船離線版</span></button>
       <button id="offline-clear" type="button" class="offline-clear" title="清除已下載的離線版" hidden aria-label="清除離線版">✕</button>
     </div>
     <button id="reset-btn" type="button" class="danger"><span class="btn-text-full">清除全部</span><span class="btn-text-short" aria-hidden="true">清除</span></button>
@@ -122,6 +126,17 @@
 </div>
 
 <div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
+
+<div id="ship-picker" class="ship-picker" hidden>
+  <header class="ship-picker-header">
+    <h1>選擇你的郵輪</h1>
+    <p class="ship-picker-subtitle">Pick your Disney cruise ship</p>
+  </header>
+  <ul id="ship-picker-grid" class="ship-picker-grid"></ul>
+  <div id="ship-picker-loading" class="ship-picker-loading" hidden></div>
+  <p id="ship-picker-error" class="ship-picker-error" hidden></p>
+  <button id="ship-picker-close" type="button" class="ship-picker-close" hidden aria-label="關閉">✕</button>
+</div>
 
 <div id="login-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="login-title">
   <div class="modal-backdrop" data-modal-close></div>

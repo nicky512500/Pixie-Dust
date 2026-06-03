@@ -1,7 +1,7 @@
 {
   "name": "Pixie Dust 小工具",
   "short_name": "Pixie Dust",
-  "description": "Disney Adventure 郵輪房間分組小工具（可離線）",
+  "description": "Disney 郵輪房間分組小工具（可離線）",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

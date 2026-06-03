@@ -1,0 +1,10 @@
+[
+  { "id": "magic",     "name": "Disney Magic",     "dataFile": "rooms/magic.json",     "logo": "logos/magic.png",     "available": false, "sort": 1 },
+  { "id": "wonder",    "name": "Disney Wonder",    "dataFile": "rooms/wonder.json",    "logo": "logos/wonder.png",    "available": false, "sort": 2 },
+  { "id": "dream",     "name": "Disney Dream",     "dataFile": "rooms/dream.json",     "logo": "logos/dream.png",     "available": false, "sort": 3 },
+  { "id": "fantasy",   "name": "Disney Fantasy",   "dataFile": "rooms/fantasy.json",   "logo": "logos/fantasy.png",   "available": false, "sort": 4 },
+  { "id": "wish",      "name": "Disney Wish",      "dataFile": "rooms/wish.json",      "logo": "logos/wish.png",      "available": true,  "sort": 5 },
+  { "id": "treasure",  "name": "Disney Treasure",  "dataFile": "rooms/treasure.json",  "logo": "logos/treasure.png",  "available": false, "sort": 6 },
+  { "id": "adventure", "name": "Disney Adventure", "dataFile": "rooms/adventure.json", "logo": "logos/adventure.png", "available": true,  "sort": 7 },
+  { "id": "destiny",   "name": "Disney Destiny",   "dataFile": "rooms/destiny.json",   "logo": "logos/destiny.png",   "available": false, "sort": 8 }
+]

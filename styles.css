@@ -84,6 +84,22 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
   width: auto;
   display: block;
 }
+.ship-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 4px 8px;
+}
+.ship-switcher:hover { background: var(--panel-soft); border-color: var(--border); }
+.ship-switcher-logo { height: 32px; width: auto; display: block; }
+.ship-switcher-name {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.ship-switcher-chevron { color: var(--text-dim); font-size: 12px; }
 .topbar-right { display: flex; align-items: center; gap: 8px; }
 
 /* Sidebar toggle (hidden on desktop; shown on mobile via media query) */
@@ -363,9 +379,12 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
   border-radius: 4px;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
   /* Disney's SVGs ship without a width attr but with an inline pixel
-     height. Pin width explicitly so older iOS Safari (≤15) can
-     compute a definite size — without this they collapse to 0×0
-     and the map area renders blank. */
+     height. We strip that inline style on injection and set
+     style.width = viewBoxW px in JS so each ship renders at its own
+     intended scale (Adventure 588, Wish 400, …). Without an explicit
+     width, older iOS Safari (≤15) collapses to 0×0 and the map area
+     renders blank. The fallback width below kicks in only if the JS
+     hasn't set width yet (e.g. first paint before mountShip resolves). */
   width: 588px;
   max-width: none;
   height: auto !important;
@@ -603,6 +622,103 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
 }
 .conflict-actions { display: flex; flex-direction: column; gap: 8px; }
 
+/* Ship picker (full-screen takeover; sits above modals) */
+.ship-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 16px 24px;
+  overflow-y: auto;
+}
+.ship-picker[hidden] { display: none; }
+.ship-picker-header { text-align: center; margin-bottom: 24px; }
+.ship-picker-header h1 { margin: 0; font-size: 24px; }
+.ship-picker-subtitle { margin: 4px 0 0; color: var(--text-dim); font-size: 13px; }
+.ship-picker-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  max-width: 720px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+.ship-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
+  text-align: center;
+  outline: none;
+}
+.ship-card:hover,
+.ship-card:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(20, 30, 50, 0.1);
+  transform: translateY(-2px);
+}
+.ship-card-logo { height: 56px; width: auto; }
+.ship-card-name { font-weight: 600; font-size: 14px; }
+.ship-card-soon {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 2px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.ship-card[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.55;
+}
+.ship-card[aria-disabled="true"]:hover {
+  border-color: var(--border);
+  box-shadow: none;
+  transform: none;
+}
+.ship-picker-loading {
+  margin-top: 16px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.ship-picker-error {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #fbeeee;
+  color: var(--danger);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.ship-picker-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 6px 12px;
+  font-size: 16px;
+}
+
+@media (max-width: 600px) {
+  .ship-picker { padding: 24px 12px 16px; }
+  .ship-picker-header h1 { font-size: 20px; }
+  .ship-picker-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .ship-card { padding: 14px 10px; }
+  .ship-card-logo { height: 44px; }
+}
+
 /* Toast */
 .toast {
   position: fixed;
@@ -640,6 +756,9 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
   .topbar { padding: 8px 12px; gap: 8px; }
   .topbar-left { gap: 8px; }
   .ship-logo { height: 28px; }
+  .ship-switcher { padding: 2px 6px; gap: 4px; }
+  .ship-switcher-logo { height: 26px; }
+  .ship-switcher-name { display: none; }
   .sidebar-toggle { display: inline-flex; align-items: center; justify-content: center; }
   .topbar-right { gap: 6px; }
   .topbar-right button { padding: 8px 10px; font-size: 13px; }
@@ -776,5 +895,6 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
 @media (max-width: 480px) {
   .map-controls .inline-label { font-size: 12px; }
   .ship-logo { height: 24px; }
+  .ship-switcher-logo { height: 22px; }
   .section-title { font-size: 14px; }
 }

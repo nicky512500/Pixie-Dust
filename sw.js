@@ -1,14 +1,14 @@
 // Service worker for offline use on the cruise ship (no wifi).
 // Strategy: explicit user-triggered pre-cache + cache-first runtime.
 
-const CACHE = 'pixie-dust-v17';
+const CACHE = 'pixie-dust-v19';
 const ASSETS = [
   './',
   './index.html',
   './app.js',
   './styles.css',
   './firebase-config.js',
-  './rooms.json',
+  './ships.json',
   './logo.png',
   './manifest.json',
 ];
@@ -39,12 +39,15 @@ self.addEventListener('fetch', (e) => {
   })());
 });
 
-// Page sends "cache-all" to force-download every asset for offline use.
+// Page sends "cache-all" to force-download the shell + any extra URLs
+// (typically the currently mounted ship's rooms/<ship>.json).
 self.addEventListener('message', async (e) => {
   if (!e.data || e.data.type !== 'cache-all') return;
+  const extras = Array.isArray(e.data.extraUrls) ? e.data.extraUrls : [];
+  const urls = ASSETS.concat(extras);
   const cache = await caches.open(CACHE);
   let done = 0;
-  for (const url of ASSETS) {
+  for (const url of urls) {
     try {
       // Bypass HTTP cache to make sure we have the freshest version.
       const res = await fetch(url, { cache: 'reload' });
@@ -54,7 +57,7 @@ self.addEventListener('message', async (e) => {
       return;
     }
     done += 1;
-    e.source.postMessage({ type: 'cache-progress', done, total: ASSETS.length });
+    e.source.postMessage({ type: 'cache-progress', done, total: urls.length });
   }
-  e.source.postMessage({ type: 'cache-done', total: ASSETS.length });
+  e.source.postMessage({ type: 'cache-done', total: urls.length });
 });

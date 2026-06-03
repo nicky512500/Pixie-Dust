@@ -1,15 +1,21 @@
 'use strict';
 
-const STORAGE_KEY = 'disney-cruise-groups-v1';
+const STORAGE_KEY = 'disney-cruise-groups-v1';        // v1 — read-only, for migration
+const STORAGE_KEY_V2 = 'disney-cruise-groups-v2';     // v2 — {ships:{shipId:{groups,rooms,notes}}, schemaVersion:2}
+const CURRENT_SHIP_KEY = 'disney-cruise-current-ship';
+const SCHEMA_VERSION = 2;
 const UI_KEY = 'disney-cruise-ui-v1';
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// Loaded once at boot from ships.json.
+let availableShips = [];
 const DEFAULT_COLORS = [
   '#ff6b6b', '#4aa8ff', '#57c8a2', '#c79a4b', '#b673e0',
   '#f4a261', '#e76f51', '#2ec4b6', '#e07a5f', '#81b29a',
 ];
 
 const state = {
-  ship: null,
+  currentShip: null,    // slug of the ship the user is browsing
   decks: [],
   deckById: new Map(),
   // room id (string) -> { deck: number, categories: string[], flags: string[] }
@@ -28,27 +34,83 @@ const state = {
 };
 
 // ---------- Persistence ----------
+//
+// Schema v2 (current):
+//   localStorage[STORAGE_KEY_V2] = {
+//     schemaVersion: 2,
+//     ships: {
+//       <shipId>: { groups: [...], rooms: {roomId: [groupIds]}, notes: {roomId: text} },
+//     },
+//   }
+// Schema v1 (legacy, single-ship Adventure):
+//   localStorage[STORAGE_KEY] = { groups, rooms, notes }
+// On first v2 boot we migrate v1 → ships.adventure and leave the v1 key
+// in place as a safety net for one release.
+
+function readV2Blob() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_V2);
+    if (!raw) return { schemaVersion: SCHEMA_VERSION, ships: {} };
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== 'object' || !data.ships) {
+      return { schemaVersion: SCHEMA_VERSION, ships: {} };
+    }
+    return data;
+  } catch (e) {
+    console.warn('failed to read v2 blob', e);
+    return { schemaVersion: SCHEMA_VERSION, ships: {} };
+  }
+}
+
+function writeV2Blob(blob) {
+  localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(blob));
+}
+
+function migrateV1ToV2() {
+  // Idempotent: only runs if v1 has data and v2 doesn't have an adventure slot.
+  let v1raw;
+  try { v1raw = localStorage.getItem(STORAGE_KEY); } catch (e) { return null; }
+  if (!v1raw) return null;
+  let v1;
+  try { v1 = JSON.parse(v1raw); } catch (e) { return null; }
+  if (!v1 || typeof v1 !== 'object') return null;
+  const blob = readV2Blob();
+  if (blob.ships.adventure) return null; // already migrated
+  blob.ships.adventure = {
+    groups: Array.isArray(v1.groups) ? v1.groups : [],
+    rooms: (v1.rooms && typeof v1.rooms === 'object') ? v1.rooms : {},
+    notes: (v1.notes && typeof v1.notes === 'object') ? v1.notes : {},
+  };
+  blob.schemaVersion = SCHEMA_VERSION;
+  writeV2Blob(blob);
+  // Default the user onto Adventure so they don't see the picker.
+  if (!localStorage.getItem(CURRENT_SHIP_KEY)) {
+    try { localStorage.setItem(CURRENT_SHIP_KEY, 'adventure'); } catch (e) {}
+  }
+  return 'adventure';
+}
 
 function loadPersisted() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const data = JSON.parse(raw);
-    if (Array.isArray(data.groups)) state.groups = data.groups;
-    if (data.rooms && typeof data.rooms === 'object') {
-      state.roomGroups = new Map();
-      for (const [roomId, v] of Object.entries(data.rooms)) {
-        // Backward compat: old format was string (single group),
-        // new format is array of group ids.
-        if (typeof v === 'string') state.roomGroups.set(roomId, new Set([v]));
-        else if (Array.isArray(v) && v.length > 0) state.roomGroups.set(roomId, new Set(v));
-      }
+  // Populates state.groups / roomGroups / roomNotes from the slot for
+  // state.currentShip in the v2 blob. No-op if currentShip not set yet.
+  state.groups = [];
+  state.roomGroups = new Map();
+  state.roomNotes = new Map();
+  if (!state.currentShip) return;
+  const blob = readV2Blob();
+  const slot = blob.ships[state.currentShip];
+  if (!slot) return;
+  if (Array.isArray(slot.groups)) state.groups = slot.groups;
+  if (slot.rooms && typeof slot.rooms === 'object') {
+    for (const [roomId, v] of Object.entries(slot.rooms)) {
+      if (typeof v === 'string') state.roomGroups.set(roomId, new Set([v]));
+      else if (Array.isArray(v) && v.length > 0) state.roomGroups.set(roomId, new Set(v));
     }
-    if (data.notes && typeof data.notes === 'object') {
-      state.roomNotes = new Map(Object.entries(data.notes).filter(([, v]) => typeof v === 'string' && v.length > 0));
-    }
-  } catch (e) {
-    console.warn('failed to load saved state', e);
+  }
+  if (slot.notes && typeof slot.notes === 'object') {
+    state.roomNotes = new Map(
+      Object.entries(slot.notes).filter(([, v]) => typeof v === 'string' && v.length > 0)
+    );
   }
 }
 
@@ -65,7 +127,11 @@ function serializeState() {
 }
 
 function persist() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+  if (!state.currentShip) return;
+  const blob = readV2Blob();
+  blob.ships[state.currentShip] = serializeState();
+  blob.schemaVersion = SCHEMA_VERSION;
+  writeV2Blob(blob);
   scheduleCloudWrite();
 }
 
@@ -78,12 +144,16 @@ function setRoomNote(roomId, text) {
 
 // ---------- Data load ----------
 
-async function loadRooms() {
-  const res = await fetch('rooms.json');
-  if (!res.ok) throw new Error(`rooms.json HTTP ${res.status}`);
+async function loadRooms(shipId) {
+  const ship = availableShips.find(s => s.id === shipId);
+  const url = (ship && ship.dataFile) || `rooms/${shipId}.json`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url} HTTP ${res.status}`);
   const data = await res.json();
-  state.ship = data.ship;
+  // Reset deck-level state so a previous ship's data doesn't leak through.
   state.decks = data.decks;
+  state.deckById = new Map();
+  state.roomIndex = new Map();
   for (const d of state.decks) {
     state.deckById.set(d.deck, d);
     for (const r of d.rooms) {
@@ -97,6 +167,161 @@ async function loadRooms() {
       });
     }
   }
+}
+
+async function loadShips() {
+  const res = await fetch('ships.json');
+  if (!res.ok) throw new Error(`ships.json HTTP ${res.status}`);
+  const data = await res.json();
+  availableShips = Array.isArray(data) ? data.slice() : [];
+  availableShips.sort((a, b) => (a.sort || 0) - (b.sort || 0));
+}
+
+// ---------- Ship picker / switcher ----------
+
+let shipSwitchInFlight = false;
+
+async function mountShip(shipId) {
+  // Brings up a ship's data + UI from scratch. Called by init() on first
+  // valid boot and by switchShip() after the user picks a different ship.
+  const ship = availableShips.find(s => s.id === shipId);
+  if (!ship || !ship.available) throw new Error(`ship not available: ${shipId}`);
+  state.currentShip = shipId;
+  try { localStorage.setItem(CURRENT_SHIP_KEY, shipId); } catch (e) {}
+  await loadRooms(shipId);
+  loadPersisted();
+  // Pick initial deck — prefer last-viewed deck for this ship; otherwise
+  // a mid stateroom deck if available.
+  const remembered = loadPersistedDeck(shipId);
+  if (remembered != null && state.deckById.has(remembered)) {
+    state.currentDeck = remembered;
+  } else {
+    const preferred = [10, 9, 12, 13, 15];
+    state.currentDeck = preferred.find(n => state.deckById.has(n)) || state.decks[0].deck;
+  }
+  renderDeckList();
+  populateFilterDropdowns();
+  renderGroups();
+  renderBulkGroupSelect();
+  renderPopupGroupSelect();
+  showDeck(state.currentDeck);
+  // Restore last zoom; if none saved, fit-to-screen.
+  const savedZoom = loadPersistedZoom();
+  if (savedZoom != null) {
+    state.zoom = savedZoom;
+    requestAnimationFrame(applyZoom);
+  } else {
+    requestAnimationFrame(fitZoom);
+  }
+  updateShipSwitcher();
+  refreshOfflineState();
+}
+
+async function switchShip(shipId) {
+  if (shipSwitchInFlight) return;
+  if (shipId === state.currentShip) { closeShipPicker(); return; }
+  const ship = availableShips.find(s => s.id === shipId);
+  if (!ship || !ship.available) return;
+  shipSwitchInFlight = true;
+  showShipPickerLoading(true, ship.name);
+  // Reset transient state.
+  state.filter = null;
+  state.assigningGroupId = null;
+  state.expandedGroups = new Set();
+  closePopup();
+  closeSidebar();
+  try {
+    await mountShip(shipId);
+    closeShipPicker();
+  } catch (e) {
+    console.warn('switchShip failed', e);
+    showShipPickerError(`下載失敗（${e.message || e}）`);
+  } finally {
+    showShipPickerLoading(false);
+    shipSwitchInFlight = false;
+  }
+}
+
+function updateShipSwitcher() {
+  const nameEl = document.getElementById('ship-switcher-name');
+  if (nameEl) nameEl.textContent = shipDisplayName(state.currentShip);
+  const logoEl = document.querySelector('#ship-switcher .ship-switcher-logo');
+  if (logoEl) {
+    const ship = availableShips.find(s => s.id === state.currentShip);
+    const src = (ship && ship.logo) || 'logo.png';
+    if (logoEl.getAttribute('src') !== src) {
+      logoEl.onerror = () => { logoEl.onerror = null; logoEl.src = 'logo.png'; };
+      logoEl.src = src;
+    }
+  }
+}
+
+function renderShipCard(ship) {
+  const li = document.createElement('li');
+  li.className = 'ship-card';
+  li.dataset.shipId = ship.id;
+  if (!ship.available) li.setAttribute('aria-disabled', 'true');
+  else li.tabIndex = 0;
+  const logo = document.createElement('img');
+  logo.className = 'ship-card-logo';
+  logo.alt = '';
+  logo.src = ship.logo || 'logo.png';
+  logo.onerror = () => { logo.onerror = null; logo.src = 'logo.png'; };
+  const name = document.createElement('div');
+  name.className = 'ship-card-name';
+  name.textContent = ship.name;
+  li.append(logo, name);
+  if (!ship.available) {
+    const soon = document.createElement('div');
+    soon.className = 'ship-card-soon';
+    soon.textContent = '尚未推出';
+    li.append(soon);
+  } else {
+    li.addEventListener('click', () => switchShip(ship.id));
+    li.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        switchShip(ship.id);
+      }
+    });
+  }
+  return li;
+}
+
+function openShipPicker(allowClose = true) {
+  const picker = document.getElementById('ship-picker');
+  const grid = document.getElementById('ship-picker-grid');
+  const closeBtn = document.getElementById('ship-picker-close');
+  if (!picker || !grid) return;
+  grid.innerHTML = '';
+  for (const ship of availableShips) grid.appendChild(renderShipCard(ship));
+  if (closeBtn) closeBtn.hidden = !allowClose;
+  showShipPickerError('');
+  picker.hidden = false;
+}
+
+function closeShipPicker() {
+  const picker = document.getElementById('ship-picker');
+  if (picker) picker.hidden = true;
+  showShipPickerLoading(false);
+}
+
+function showShipPickerLoading(on, shipName = '') {
+  const el = document.getElementById('ship-picker-loading');
+  if (!el) return;
+  if (on) {
+    el.textContent = shipName ? `載入 ${shipName} 資料中…` : '載入郵輪資料中…';
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
+function showShipPickerError(msg) {
+  const el = document.getElementById('ship-picker-error');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.hidden = !msg;
 }
 
 // ---------- Group operations ----------
@@ -206,21 +431,35 @@ function renderDeckInfo() {
   for (const r of d.rooms) for (const c of r.categories) cats[c] = (cats[c] || 0) + 1;
   const summary = Object.entries(cats).map(([k, v]) => `${k} ${v}`).join('  ·  ');
   document.getElementById('deck-info').textContent =
-    `${state.ship === 'adventure' ? 'Disney Adventure' : state.ship} · Deck ${d.deck} · ${d.rooms.length} 房間` +
+    `${shipDisplayName(state.currentShip)} · Deck ${d.deck} · ${d.rooms.length} 房間` +
     (summary ? `  ·  ${summary}` : '');
+}
+
+function shipDisplayName(shipId) {
+  const ship = availableShips.find(s => s.id === shipId);
+  return (ship && ship.name) || shipId || '';
 }
 
 function showDeck(deckNum) {
   const d = state.deckById.get(deckNum);
   if (!d) return;
   state.currentDeck = deckNum;
+  // Remember last-viewed deck per ship so a refresh / re-mount restores it
+  // rather than always snapping back to the preferred-list default.
+  persistUi();
   const stage = document.getElementById('map-stage');
   stage.innerHTML = d.svg;
   // Disney ships SVGs with an inline `style="height: …px"` that fights
   // our CSS sizing on older iOS Safari. Drop it so SVG falls back to
   // viewBox-aspect auto height.
   const svgEl = stage.querySelector('svg');
-  if (svgEl) svgEl.removeAttribute('style');
+  if (svgEl) {
+    svgEl.removeAttribute('style');
+    // Pin width to the deck's natural viewBox width so each ship renders
+    // at its intended scale (Adventure = 588, Wish = 400, etc.) and so
+    // older iOS Safari has a definite size to lay out against.
+    if (d.viewBoxW) svgEl.style.width = d.viewBoxW + 'px';
+  }
   renderDeckInfo();
   attachRoomHandlers();
   repaintCurrentDeck();
@@ -889,8 +1128,17 @@ function applyZoom() {
 function persistUi() {
   const mapArea = document.querySelector('.map-area');
   const toolbarCollapsed = !!(mapArea && mapArea.classList.contains('toolbar-collapsed'));
+  const prev = loadPersistedUi();
+  const deckByShip = (prev.deckByShip && typeof prev.deckByShip === 'object') ? { ...prev.deckByShip } : {};
+  if (state.currentShip && state.currentDeck != null) {
+    deckByShip[state.currentShip] = state.currentDeck;
+  }
   try {
-    localStorage.setItem(UI_KEY, JSON.stringify({ zoom: state.zoom, toolbarCollapsed }));
+    localStorage.setItem(UI_KEY, JSON.stringify({
+      zoom: state.zoom,
+      toolbarCollapsed,
+      deckByShip,
+    }));
   } catch (e) { /* full / unavailable — non-fatal */ }
 }
 
@@ -907,6 +1155,13 @@ function loadPersistedZoom() {
   return (Number.isFinite(z) && z >= 0.1 && z <= 3) ? z : null;
 }
 
+function loadPersistedDeck(shipId) {
+  const map = loadPersistedUi().deckByShip;
+  if (!map || typeof map !== 'object') return null;
+  const n = Number(map[shipId]);
+  return Number.isFinite(n) ? n : null;
+}
+
 function setZoomPercent(pct) {
   const n = Number(pct);
   if (!Number.isFinite(n)) return;
@@ -917,12 +1172,12 @@ function setZoomPercent(pct) {
 function fitZoom() {
   const scroll = document.getElementById('map-scroll');
   if (!scroll) return;
-  // The ship SVG is tall and narrow (588 wide × ~3700 tall). Fit by width
-  // so the calculation doesn't depend on layout being fully settled.
-  // On desktop we let the ship occupy ~31% of the map area width; on
-  // narrow viewports (phones) we let it occupy more so it isn't lost
-  // in empty space.
-  const SVG_W = 588;
+  // Each ship has its own viewBox width (Adventure = 588, Wish = 400, ...).
+  // Fit by width so the calculation doesn't depend on layout being fully
+  // settled. On desktop we let the ship occupy ~31% of the map area
+  // width; on narrow viewports (phones) we let it occupy more so it
+  // isn't lost in empty space.
+  const SVG_W = (state.decks[0] && state.decks[0].viewBoxW) || 588;
   const w = scroll.clientWidth || window.innerWidth;
   const targetOccupancy = w > 768 ? 0.31 : 0.8;
   const raw = (w * targetOccupancy) / SVG_W;
@@ -991,9 +1246,8 @@ async function setupOffline() {
     return;
   }
 
-  let reg;
   try {
-    reg = await navigator.serviceWorker.register('./sw.js');
+    await navigator.serviceWorker.register('./sw.js');
   } catch (e) {
     btn.disabled = true;
     btn.textContent = '離線設定失敗';
@@ -1012,12 +1266,6 @@ async function setupOffline() {
 
   const clearBtn = document.getElementById('offline-clear');
 
-  // If the cache already exists, mark as ready.
-  if ('caches' in window) {
-    const cached = await caches.match('./rooms.json');
-    if (cached) markOfflineReady(btn, clearBtn);
-  }
-
   clearBtn.addEventListener('click', async () => {
     if (!confirm('清除已下載的離線版？分組與備註不會受影響。下次需要離線使用時要重新下載。')) return;
     try {
@@ -1030,47 +1278,78 @@ async function setupOffline() {
       return;
     }
     btn.disabled = false;
-    btn.textContent = '📥 下載離線版';
+    btn.querySelector('.btn-text').textContent = ' 下載此船離線版';
+    btn.querySelector('.btn-icon').textContent = '📥';
     btn.classList.remove('offline-ready');
-    btn.title = '把整個網頁下載到瀏覽器，沒網路也能用';
+    btn.title = '把此船的網頁與資料下載到瀏覽器，沒網路也能用';
     clearBtn.hidden = true;
     showToast('離線版已清除');
   });
 
   btn.addEventListener('click', async () => {
+    if (!state.currentShip) {
+      showToast('請先選擇郵輪', true);
+      return;
+    }
+    const ship = availableShips.find(s => s.id === state.currentShip);
+    if (!ship) return;
     const sw = navigator.serviceWorker.controller || (await navigator.serviceWorker.ready).active;
     if (!sw) {
       showToast('Service worker 還沒啟動，1 秒後再試', true);
       return;
     }
     btn.disabled = true;
-    btn.textContent = '下載中… 0%';
+    btn.querySelector('.btn-icon').textContent = '⏳';
+    btn.querySelector('.btn-text').textContent = ' 下載中… 0%';
     const onMsg = (ev) => {
       const d = ev.data;
       if (!d) return;
       if (d.type === 'cache-progress') {
-        btn.textContent = `下載中… ${Math.round(d.done / d.total * 100)}%`;
+        btn.querySelector('.btn-text').textContent = ` 下載中… ${Math.round(d.done / d.total * 100)}%`;
       } else if (d.type === 'cache-done') {
         navigator.serviceWorker.removeEventListener('message', onMsg);
         markOfflineReady(btn, clearBtn);
-        showToast('離線版已就緒，可關閉網路使用');
+        showToast(`${ship.name} 離線版已就緒`);
       } else if (d.type === 'cache-error') {
         navigator.serviceWorker.removeEventListener('message', onMsg);
         btn.disabled = false;
-        btn.textContent = '📥 下載離線版';
+        btn.querySelector('.btn-icon').textContent = '📥';
+        btn.querySelector('.btn-text').textContent = ' 下載此船離線版';
         showToast(`下載失敗：${d.url}`, true);
       }
     };
     navigator.serviceWorker.addEventListener('message', onMsg);
-    sw.postMessage({ type: 'cache-all' });
+    sw.postMessage({ type: 'cache-all', extraUrls: [ship.dataFile] });
   });
+}
+
+async function refreshOfflineState() {
+  // Called after each mountShip so the button reflects whether the
+  // newly-mounted ship's data file is already cached.
+  if (!('caches' in window)) return;
+  const btn = document.getElementById('offline-btn');
+  const clearBtn = document.getElementById('offline-clear');
+  if (!btn) return;
+  const ship = availableShips.find(s => s.id === state.currentShip);
+  if (!ship) return;
+  const cached = await caches.match(ship.dataFile);
+  if (cached) {
+    markOfflineReady(btn, clearBtn);
+  } else {
+    btn.classList.remove('offline-ready');
+    btn.querySelector('.btn-icon').textContent = '📥';
+    btn.querySelector('.btn-text').textContent = ' 下載此船離線版';
+    btn.title = '把此船的網頁與資料下載到瀏覽器，沒網路也能用';
+    if (clearBtn) clearBtn.hidden = true;
+  }
 }
 
 function markOfflineReady(btn, clearBtn) {
   btn.disabled = false;
-  btn.textContent = '✓ 離線版已就緒';
+  btn.querySelector('.btn-icon').textContent = '✓';
+  btn.querySelector('.btn-text').textContent = ' 離線版已就緒';
   btn.classList.add('offline-ready');
-  btn.title = '已將整個網頁下載到瀏覽器。沒網路也能打開這個網址。再點一次會重新下載最新版。';
+  btn.title = '已將此船的網頁與資料下載到瀏覽器。沒網路也能打開這個網址。再點一次會重新下載最新版。';
   if (clearBtn) clearBtn.hidden = false;
 }
 
@@ -1144,16 +1423,44 @@ async function handleAuthChange(user) {
   initialSyncDone = true;
 }
 
-function hasLocalData() {
-  return state.groups.length > 0 || state.roomGroups.size > 0 || state.roomNotes.size > 0;
+// All sync-layer functions below operate on the v2 nested shape:
+//   { schemaVersion: 2, ships: { shipId: { groups, rooms, notes } } }
+// Cloud docs written by v1 of the app are flat ({ groups, rooms, notes });
+// they are normalized into v2 shape via `normalizeCloud()` below before
+// any comparison or apply.
+
+function normalizeCloud(data) {
+  if (!data) return { schemaVersion: SCHEMA_VERSION, ships: {} };
+  if (data.ships && typeof data.ships === 'object') {
+    return { schemaVersion: data.schemaVersion || 2, ships: data.ships };
+  }
+  // Legacy v1 doc — treat as Adventure-only.
+  const slot = {
+    groups: Array.isArray(data.groups) ? data.groups : [],
+    rooms: (data.rooms && typeof data.rooms === 'object') ? data.rooms : {},
+    notes: (data.notes && typeof data.notes === 'object') ? data.notes : {},
+  };
+  return { schemaVersion: 1, ships: { adventure: slot } };
 }
-function hasCloudData(data) {
-  if (!data) return false;
-  const g = Array.isArray(data.groups) && data.groups.length > 0;
-  const r = data.rooms && Object.keys(data.rooms).length > 0;
-  const n = data.notes && Object.keys(data.notes).length > 0;
-  return !!(g || r || n);
+
+function emptyShipSlot() { return { groups: [], rooms: {}, notes: {} }; }
+
+function shipSlotHasData(s) {
+  if (!s) return false;
+  if (Array.isArray(s.groups) && s.groups.length > 0) return true;
+  if (s.rooms && Object.keys(s.rooms).length > 0) return true;
+  if (s.notes && Object.keys(s.notes).length > 0) return true;
+  return false;
 }
+
+function blobHasData(blob) {
+  if (!blob || !blob.ships) return false;
+  for (const s of Object.values(blob.ships)) if (shipSlotHasData(s)) return true;
+  return false;
+}
+
+function hasLocalData() { return blobHasData(readV2Blob()); }
+function hasCloudData(data) { return blobHasData(normalizeCloud(data)); }
 
 // Canonical JSON form for equality comparisons. Recursively sorts object
 // keys and array members of group-id sets so two functionally identical
@@ -1169,124 +1476,191 @@ function stableStringify(v) {
   return JSON.stringify(v);
 }
 
-function canonicalDataString(d) {
-  const groups = (d.groups || []).slice().sort(
+function canonicalShipSlot(slot) {
+  const groups = (slot.groups || []).slice().sort(
     (a, b) => String(a.id).localeCompare(String(b.id))
   );
   const rooms = {};
-  for (const k of Object.keys(d.rooms || {}).sort()) {
-    rooms[k] = [...(d.rooms[k] || [])].sort();
+  for (const k of Object.keys(slot.rooms || {}).sort()) {
+    rooms[k] = [...(slot.rooms[k] || [])].sort();
   }
   const notes = {};
-  for (const k of Object.keys(d.notes || {}).sort()) {
-    notes[k] = d.notes[k];
+  for (const k of Object.keys(slot.notes || {}).sort()) {
+    notes[k] = slot.notes[k];
   }
-  return stableStringify({ groups, rooms, notes });
+  return { groups, rooms, notes };
+}
+
+function canonicalDataString(d) {
+  // Accepts EITHER a full v2 blob or a single ship slot (back-compat for
+  // the local refresh-equality check that was passing serializeState()).
+  let ships;
+  if (d && d.ships) {
+    ships = d.ships;
+  } else if (d && (d.groups || d.rooms || d.notes)) {
+    // single-slot input (legacy callsite) — wrap as current ship.
+    ships = { [state.currentShip || 'adventure']: d };
+  } else {
+    ships = {};
+  }
+  const out = {};
+  for (const shipId of Object.keys(ships).sort()) {
+    if (!shipSlotHasData(ships[shipId])) continue;
+    out[shipId] = canonicalShipSlot(ships[shipId]);
+  }
+  return stableStringify({ ships: out });
 }
 
 async function resolveInitialSync(cloudData) {
-  const localHas = hasLocalData();
-  const cloudHas = hasCloudData(cloudData);
+  const cloud = normalizeCloud(cloudData);
+  const localBlob = readV2Blob();
+  const localHas = blobHasData(localBlob);
+  const cloudHas = blobHasData(cloud);
   if (!localHas && !cloudHas) { showSyncStatus('已同步', 2000, 'ok'); return; }
   if (localHas && !cloudHas)  { await writeCloudNow(); return; }
-  if (!localHas && cloudHas)  { applyCloudData(cloudData); showSyncStatus('已同步', 2000, 'ok'); return; }
-  // Both have data — if they're already identical (typical refresh case),
-  // there's nothing to resolve. Only ask the user when they actually diverge.
-  const localStr = canonicalDataString(serializeState());
-  const cloudStr = canonicalDataString(cloudData);
+  if (!localHas && cloudHas)  { applyCloudData(cloud); showSyncStatus('已同步', 2000, 'ok'); return; }
+  // Both have data — if canonically identical (typical refresh case), nothing to resolve.
+  const localStr = canonicalDataString(localBlob);
+  const cloudStr = canonicalDataString(cloud);
   if (localStr === cloudStr) {
     showSyncStatus('已同步', 2000, 'ok');
     return;
   }
   console.log('[sync] divergence — LOCAL:', localStr);
   console.log('[sync] divergence — CLOUD:', cloudStr);
-  showConflictDialog(cloudData);
+  showConflictDialog(cloud);
 }
 
 function applyCloudData(data) {
-  state.groups = Array.isArray(data.groups) ? data.groups : [];
-  state.roomGroups = new Map();
-  if (data.rooms) {
-    for (const [roomId, ids] of Object.entries(data.rooms)) {
-      if (Array.isArray(ids) && ids.length > 0) state.roomGroups.set(roomId, new Set(ids));
-    }
+  // Receives a v2 (or v1-normalized) doc. For each ship slot in the cloud,
+  // overwrite the matching local v2 blob slot. For the currently mounted
+  // ship, also re-hydrate in-memory state and re-render.
+  const cloud = normalizeCloud(data);
+  const blob = readV2Blob();
+  for (const [shipId, slot] of Object.entries(cloud.ships)) {
+    blob.ships[shipId] = {
+      groups: Array.isArray(slot.groups) ? slot.groups : [],
+      rooms: (slot.rooms && typeof slot.rooms === 'object') ? slot.rooms : {},
+      notes: (slot.notes && typeof slot.notes === 'object') ? slot.notes : {},
+    };
   }
-  state.roomNotes = new Map();
-  if (data.notes) {
-    for (const [roomId, text] of Object.entries(data.notes)) {
-      if (typeof text === 'string' && text) state.roomNotes.set(roomId, text);
-    }
-  }
-  // Persist to localStorage without re-uploading.
+  blob.schemaVersion = SCHEMA_VERSION;
   suppressCloudWrite = true;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+  writeV2Blob(blob);
   suppressCloudWrite = false;
-  // Re-render everything that displays group/room/note state.
-  renderGroups();
-  renderBulkGroupSelect();
-  renderPopupGroupSelect();
-  if (state.currentDeck != null) repaintCurrentDeck();
-  if (popupRoomId) renderPopupGroupCheckboxes(popupRoomId);
-}
 
-function mergeCloudData(cloudData) {
-  // Union semantics: every group, every room→groupIds, every note from both
-  // sides survive. Notes that conflict prefer the longer text.
-  const cloudGroups = Array.isArray(cloudData.groups) ? cloudData.groups : [];
-  const byId = new Map(state.groups.map(g => [g.id, g]));
-  for (const cg of cloudGroups) if (!byId.has(cg.id)) state.groups.push(cg);
-  if (cloudData.rooms) {
-    for (const [roomId, ids] of Object.entries(cloudData.rooms)) {
-      if (!Array.isArray(ids)) continue;
-      const set = state.roomGroups.get(roomId) || new Set();
-      for (const id of ids) set.add(id);
-      if (set.size > 0) state.roomGroups.set(roomId, set);
+  // Re-hydrate in-memory state for the current ship.
+  if (state.currentShip && cloud.ships[state.currentShip]) {
+    const slot = cloud.ships[state.currentShip];
+    state.groups = Array.isArray(slot.groups) ? slot.groups : [];
+    state.roomGroups = new Map();
+    if (slot.rooms) {
+      for (const [roomId, ids] of Object.entries(slot.rooms)) {
+        if (Array.isArray(ids) && ids.length > 0) state.roomGroups.set(roomId, new Set(ids));
+      }
     }
-  }
-  if (cloudData.notes) {
-    for (const [roomId, text] of Object.entries(cloudData.notes)) {
-      if (typeof text !== 'string' || !text) continue;
-      const cur = state.roomNotes.get(roomId);
-      if (!cur || text.length > cur.length) state.roomNotes.set(roomId, text);
+    state.roomNotes = new Map();
+    if (slot.notes) {
+      for (const [roomId, text] of Object.entries(slot.notes)) {
+        if (typeof text === 'string' && text) state.roomNotes.set(roomId, text);
+      }
     }
-  }
-}
-
-function showConflictDialog(cloudData) {
-  const modal = document.getElementById('conflict-modal');
-  const stats = document.getElementById('conflict-stats');
-  const localG = state.groups.length;
-  const localR = state.roomGroups.size;
-  const localN = state.roomNotes.size;
-  const cloudG = (cloudData.groups || []).length;
-  const cloudR = cloudData.rooms ? Object.keys(cloudData.rooms).length : 0;
-  const cloudN = cloudData.notes ? Object.keys(cloudData.notes).length : 0;
-  stats.innerHTML =
-    `<div><b>本機：</b>${localG} 個分組 · ${localR} 間房有指派 · ${localN} 則備註</div>` +
-    `<div><b>雲端：</b>${cloudG} 個分組 · ${cloudR} 間房有指派 · ${cloudN} 則備註</div>`;
-  modal.hidden = false;
-
-  const close = () => { modal.hidden = true; };
-  const onUpload = async () => {
-    close();
-    await writeCloudNow();
-    showSyncStatus('已同步', 2000, 'ok');
-  };
-  const onDownload = () => {
-    close();
-    applyCloudData(cloudData);
-    showSyncStatus('已同步', 2000, 'ok');
-  };
-  const onMerge = async () => {
-    close();
-    mergeCloudData(cloudData);
-    suppressCloudWrite = true;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
-    suppressCloudWrite = false;
     renderGroups();
     renderBulkGroupSelect();
     renderPopupGroupSelect();
     if (state.currentDeck != null) repaintCurrentDeck();
+    if (popupRoomId) renderPopupGroupCheckboxes(popupRoomId);
+  }
+}
+
+function mergeShipSlots(local, cloud) {
+  // Union semantics inside one ship's slot. Same rules as the old
+  // single-ship mergeCloudData: union groups by id, union room→groupIds
+  // sets, prefer the longer note on conflict.
+  const local2 = {
+    groups: Array.isArray(local && local.groups) ? local.groups.slice() : [],
+    rooms: (local && local.rooms) ? { ...local.rooms } : {},
+    notes: (local && local.notes) ? { ...local.notes } : {},
+  };
+  const byId = new Map(local2.groups.map(g => [g.id, g]));
+  for (const cg of (Array.isArray(cloud.groups) ? cloud.groups : [])) {
+    if (!byId.has(cg.id)) local2.groups.push(cg);
+  }
+  if (cloud.rooms) {
+    for (const [roomId, ids] of Object.entries(cloud.rooms)) {
+      if (!Array.isArray(ids)) continue;
+      const set = new Set(local2.rooms[roomId] || []);
+      for (const id of ids) set.add(id);
+      if (set.size > 0) local2.rooms[roomId] = [...set];
+    }
+  }
+  if (cloud.notes) {
+    for (const [roomId, text] of Object.entries(cloud.notes)) {
+      if (typeof text !== 'string' || !text) continue;
+      const cur = local2.notes[roomId];
+      if (!cur || text.length > cur.length) local2.notes[roomId] = text;
+    }
+  }
+  return local2;
+}
+
+function mergeCloudData(cloudData) {
+  // Union the cloud blob into the local v2 blob ship-by-ship, then
+  // re-hydrate in-memory state for the current ship.
+  const cloud = normalizeCloud(cloudData);
+  const blob = readV2Blob();
+  for (const [shipId, slot] of Object.entries(cloud.ships)) {
+    blob.ships[shipId] = mergeShipSlots(blob.ships[shipId] || emptyShipSlot(), slot);
+  }
+  blob.schemaVersion = SCHEMA_VERSION;
+  suppressCloudWrite = true;
+  writeV2Blob(blob);
+  suppressCloudWrite = false;
+  if (state.currentShip && blob.ships[state.currentShip]) {
+    loadPersisted();  // re-reads the current ship's slot into in-memory state
+    renderGroups();
+    renderBulkGroupSelect();
+    renderPopupGroupSelect();
+    if (state.currentDeck != null) repaintCurrentDeck();
+    if (popupRoomId) renderPopupGroupCheckboxes(popupRoomId);
+  }
+}
+
+function countShipSlot(slot) {
+  return {
+    g: Array.isArray(slot && slot.groups) ? slot.groups.length : 0,
+    r: (slot && slot.rooms) ? Object.keys(slot.rooms).length : 0,
+    n: (slot && slot.notes) ? Object.keys(slot.notes).length : 0,
+  };
+}
+
+function showConflictDialog(cloudData) {
+  const cloud = normalizeCloud(cloudData);
+  const localBlob = readV2Blob();
+  const modal = document.getElementById('conflict-modal');
+  const stats = document.getElementById('conflict-stats');
+  // Per-ship breakdown line. Walk a union of ship ids found on either side.
+  const ids = new Set([...Object.keys(localBlob.ships), ...Object.keys(cloud.ships)]);
+  const rows = [];
+  for (const shipId of [...ids].sort()) {
+    const l = countShipSlot(localBlob.ships[shipId]);
+    const c = countShipSlot(cloud.ships[shipId]);
+    if (!shipSlotHasData(localBlob.ships[shipId]) && !shipSlotHasData(cloud.ships[shipId])) continue;
+    rows.push(
+      `<div><b>${shipDisplayName(shipId)}：</b>` +
+      `本機 ${l.g}組 / ${l.r}房 / ${l.n}備註 · ` +
+      `雲端 ${c.g}組 / ${c.r}房 / ${c.n}備註</div>`
+    );
+  }
+  stats.innerHTML = rows.join('') || '<div>（無差異統計）</div>';
+  modal.hidden = false;
+
+  const close = () => { modal.hidden = true; };
+  const onUpload = async () => { close(); await writeCloudNow(); showSyncStatus('已同步', 2000, 'ok'); };
+  const onDownload = () => { close(); applyCloudData(cloud); showSyncStatus('已同步', 2000, 'ok'); };
+  const onMerge = async () => {
+    close();
+    mergeCloudData(cloud);
     await writeCloudNow();
     showSyncStatus('已同步', 2000, 'ok');
   };
@@ -1320,9 +1694,21 @@ function scheduleCloudWrite() {
 async function writeCloudNow() {
   if (!currentUser || !fbDocRef) return;
   clearTimeout(cloudWriteTimer);
-  const payload = serializeState();
+  // Build the cloud payload from the v2 blob — make sure the in-memory
+  // current-ship state is flushed in first so it's never stale.
+  if (state.currentShip) {
+    const blob = readV2Blob();
+    blob.ships[state.currentShip] = serializeState();
+    blob.schemaVersion = SCHEMA_VERSION;
+    writeV2Blob(blob);
+  }
+  const blob = readV2Blob();
   try {
-    await fb.setDoc(fbDocRef, { ...payload, updatedAt: fb.serverTimestamp() });
+    await fb.setDoc(fbDocRef, {
+      ships: blob.ships,
+      schemaVersion: SCHEMA_VERSION,
+      updatedAt: fb.serverTimestamp(),
+    });
     showSyncStatus('已同步', 2000, 'ok');
   } catch (e) {
     console.warn('cloud write failed', e);
@@ -1462,33 +1848,17 @@ function wireLoginUi() {
 
 async function init() {
   try {
-    await loadRooms();
+    await loadShips();
   } catch (e) {
-    document.body.innerHTML = `<div style="padding:32px;color:#ef5d5d">無法載入 rooms.json：${e.message}<br><br>請用本地 web server 開啟（例如 <code>python3 -m http.server</code>），不要用 file:// 直接打開。</div>`;
+    document.body.innerHTML = `<div style="padding:32px;color:#ef5d5d">無法載入 ships.json：${e.message}<br><br>請用本地 web server 開啟（例如 <code>python3 -m http.server</code>），不要用 file:// 直接打開。</div>`;
     return;
   }
-  loadPersisted();
+  // Migrate v1 localStorage (legacy single-ship Adventure data) → v2.ships.adventure.
+  migrateV1ToV2();
 
-  // pick initial deck — prefer a mid stateroom deck if available
-  const preferred = [10, 9, 12, 13, 15];
-  state.currentDeck = preferred.find(n => state.deckById.has(n)) || state.decks[0].deck;
-
-  renderDeckList();
-  populateFilterDropdowns();
-  renderGroups();
-  renderBulkGroupSelect();
-  renderPopupGroupSelect();
-  showDeck(state.currentDeck);
-  // Restore last zoom; if none saved, fit-to-screen.
-  const savedZoom = loadPersistedZoom();
-  if (savedZoom != null) {
-    state.zoom = savedZoom;
-    requestAnimationFrame(applyZoom);
-  } else {
-    requestAnimationFrame(fitZoom);
-  }
-
-  // Event wiring
+  // Wire up DOM event handlers up front — they reference state by closure
+  // but only fire on user interaction, so they're safe to bind before a
+  // ship is mounted.
   document.getElementById('deck-select').addEventListener('change', (e) => showDeck(parseInt(e.target.value, 10)));
   document.getElementById('add-group').addEventListener('click', () => {
     addGroup();
@@ -1500,7 +1870,8 @@ async function init() {
   document.getElementById('theme-filter').addEventListener('change', refreshFilter);
   document.getElementById('category-filter').addEventListener('change', refreshFilter);
   document.getElementById('reset-btn').addEventListener('click', () => {
-    if (!confirm('清除所有分組、房間指派與備註？此動作無法復原（除非有匯出的 JSON）。')) return;
+    const shipName = shipDisplayName(state.currentShip);
+    if (!confirm(`清除「${shipName}」的所有分組、房間指派與備註？其他郵輪不受影響。`)) return;
     state.groups = [];
     state.roomGroups.clear();
     state.roomNotes.clear();
@@ -1602,6 +1973,28 @@ async function init() {
   setupOffline();
   wireLoginUi();
   setupFirebase();
+
+  // Ship picker / switcher wiring.
+  const shipSwitcher = document.getElementById('ship-switcher');
+  if (shipSwitcher) shipSwitcher.addEventListener('click', () => openShipPicker(true));
+  const shipPickerClose = document.getElementById('ship-picker-close');
+  if (shipPickerClose) shipPickerClose.addEventListener('click', closeShipPicker);
+
+  // Route to the right entry point: saved ship → mount; else → picker.
+  let savedShip = null;
+  try { savedShip = localStorage.getItem(CURRENT_SHIP_KEY); } catch (e) {}
+  const savedAvailable = savedShip
+    && availableShips.find(s => s.id === savedShip && s.available);
+  if (savedAvailable) {
+    try {
+      await mountShip(savedShip);
+    } catch (e) {
+      console.warn('mountShip failed, falling back to picker', e);
+      openShipPicker(false);
+    }
+  } else {
+    openShipPicker(false);
+  }
 }
 
 init();

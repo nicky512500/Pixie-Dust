@@ -4,7 +4,7 @@
 # Disney's original HTML files — not redistributable, large, and only
 # needed to (re)generate rooms.json. The committed rooms.json already
 # contains the processed data the site needs.
-data/raw/
+data/
 
 # Local-only — not needed to serve the webpage.
 README.md
