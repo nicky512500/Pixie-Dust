@@ -1953,6 +1953,35 @@ async function init() {
       applyToolbarCollapsed(next);
       persistUi();
     });
+
+    // Auto-collapse on scroll-down past the threshold; auto-expand when
+    // the user scrolls back to within the threshold of the very top.
+    // Mobile only, transient (no persistUi).
+    const mapScroll = document.getElementById('map-scroll');
+    if (mapScroll) {
+      let lastY = 0;
+      let ticking = false;
+      const DELTA_THRESHOLD = 12;     // ignore tiny jitter
+      const TOP_THRESHOLD = 40;       // collapse below / expand within
+      mapScroll.addEventListener('scroll', () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+          ticking = false;
+          if (!isMobileViewport()) { lastY = mapScroll.scrollTop; return; }
+          const y = mapScroll.scrollTop;
+          const dy = y - lastY;
+          if (Math.abs(dy) < DELTA_THRESHOLD) return;
+          lastY = y;
+          const collapsed = mapArea.classList.contains('toolbar-collapsed');
+          if (dy > 0 && y > TOP_THRESHOLD && !collapsed) {
+            applyToolbarCollapsed(true);
+          } else if (dy < 0 && y <= TOP_THRESHOLD && collapsed) {
+            applyToolbarCollapsed(false);
+          }
+        });
+      }, { passive: true });
+    }
   }
 
   // Mobile sidebar drawer
