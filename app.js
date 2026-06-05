@@ -243,6 +243,10 @@ async function switchShip(shipId) {
 }
 
 function updateShipSwitcher() {
+  // Surface the current ship on <body> so per-ship CSS overrides (e.g.
+  // number-label font-weight tuned to each ship's SVG font-size) can
+  // hook in via a [data-ship="…"] selector.
+  if (state.currentShip) document.body.dataset.ship = state.currentShip;
   const nameEl = document.getElementById('ship-switcher-name');
   if (nameEl) nameEl.textContent = shipDisplayName(state.currentShip);
   const logoEl = document.querySelector('#ship-switcher .ship-switcher-logo');

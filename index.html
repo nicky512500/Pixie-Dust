@@ -15,7 +15,7 @@
   <div class="topbar-left">
     <button id="sidebar-toggle" type="button" class="sidebar-toggle" aria-label="開啟分組面板" aria-expanded="false">☰</button>
     <button id="ship-switcher" type="button" class="ship-switcher" aria-label="切換郵輪" title="切換郵輪">
-      <img class="ship-switcher-logo" src="logo.png" alt="">
+      <img class="ship-switcher-logo" alt="">
       <span id="ship-switcher-name" class="ship-switcher-name"></span>
       <span class="ship-switcher-chevron" aria-hidden="true">▾</span>
     </button>
@@ -192,6 +192,23 @@
   </div>
 </div>
 
+<script>
+  // Set the topbar logo synchronously from the last-saved ship so the
+  // first paint shows the right ship instead of flashing logo.png
+  // (which happens to be Disney Adventure's logo).
+  (function () {
+    try {
+      var saved = localStorage.getItem('disney-cruise-current-ship');
+      var slug = (saved && /^[a-z]+$/.test(saved)) ? saved : null;
+      if (slug) {
+        var img = document.querySelector('.ship-switcher-logo');
+        if (img) img.src = 'logos/' + slug + '.png';
+      }
+      // No saved ship → leave src empty; the full-screen picker covers
+      // the topbar before the user notices.
+    } catch (e) {}
+  })();
+</script>
 <script src="firebase-config.js"></script>
 <script src="app.js"></script>
 </body>

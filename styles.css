@@ -441,13 +441,20 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
   stroke-width: 2 !important;
 }
 
-/* Number labels */
+/* Number labels — Avenir-Book only ships discrete 400 / 600 variants on
+   iOS, so we can't soften the weight with a 500 / 550 in-between.
+   Instead, equalise the visual size across ships (Adventure ships 14px
+   at viewBox 588; Wish ships 12px at viewBox 400 → after fit-to-screen
+   Wish text ends up ~27 % larger and looks heavy at weight 600). Shrink
+   Wish's text-size proportionally so all ships read at the same scale
+   with the same weight. */
 .map-stage [id^="number-"] {
   pointer-events: none;
   user-select: none;
   font-weight: 600;
   fill: #1a2333 !important;
 }
+body[data-ship="wish"] .map-stage [id^="number-"] { font-size: 9.5px; }
 
 /* Popup */
 .popup {
