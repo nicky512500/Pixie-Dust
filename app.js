@@ -7,6 +7,17 @@ const SCHEMA_VERSION = 2;
 const UI_KEY = 'disney-cruise-ui-v1';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+// Default on-screen width (Adventure's viewBox) a ship's deck map is pinned
+// to. Each ship can override via "mapWidth" in ships.json to render larger or
+// smaller independent of its own viewBox width (Wish = 400, Magic = 358, ...).
+// Zoom scales on top.
+const REF_VIEWBOX_W = 588;
+
+function mapWidthFor(shipId) {
+  const ship = availableShips.find(s => s.id === shipId);
+  return (ship && ship.mapWidth) || REF_VIEWBOX_W;
+}
+
 // Loaded once at boot from ships.json.
 let availableShips = [];
 const DEFAULT_COLORS = [
@@ -459,10 +470,11 @@ function showDeck(deckNum) {
   const svgEl = stage.querySelector('svg');
   if (svgEl) {
     svgEl.removeAttribute('style');
-    // Pin width to the deck's natural viewBox width so each ship renders
-    // at its intended scale (Adventure = 588, Wish = 400, etc.) and so
-    // older iOS Safari has a definite size to lay out against.
-    if (d.viewBoxW) svgEl.style.width = d.viewBoxW + 'px';
+    // Pin each ship's map to its configured display width (default 588) so
+    // ships render at independently-tunable on-screen sizes (and so older iOS
+    // Safari has a definite width to lay out against). The viewBox preserves
+    // each deck's aspect ratio.
+    svgEl.style.width = mapWidthFor(state.currentShip) + 'px';
   }
   renderDeckInfo();
   attachRoomHandlers();
@@ -1176,15 +1188,14 @@ function setZoomPercent(pct) {
 function fitZoom() {
   const scroll = document.getElementById('map-scroll');
   if (!scroll) return;
-  // Each ship has its own viewBox width (Adventure = 588, Wish = 400, ...).
-  // Fit by width so the calculation doesn't depend on layout being fully
-  // settled. On desktop we let the ship occupy ~31% of the map area
-  // width; on narrow viewports (phones) we let it occupy more so it
-  // isn't lost in empty space.
-  const SVG_W = (state.decks[0] && state.decks[0].viewBoxW) || 588;
+  // Each ship's map is pinned to its configured display width, so fit against
+  // that same width. Fit by width so the calculation doesn't depend on layout
+  // being fully settled. On desktop we let the ship occupy ~31% of the map
+  // area width; on narrow viewports (phones) we let it occupy more so it isn't
+  // lost in empty space.
   const w = scroll.clientWidth || window.innerWidth;
   const targetOccupancy = w > 768 ? 0.31 : 0.8;
-  const raw = (w * targetOccupancy) / SVG_W;
+  const raw = (w * targetOccupancy) / mapWidthFor(state.currentShip);
   state.zoom = Math.max(0.3, Math.min(1.2, raw));
   applyZoom();
 }
