@@ -1,7 +1,7 @@
 [
   { "id": "magic",     "name": "Disney Magic",     "dataFile": "rooms/magic.json",     "logo": "logos/magic.png",     "available": true,  "sort": 1, "mapWidth": 380 },
-  { "id": "wonder",    "name": "Disney Wonder",    "dataFile": "rooms/wonder.json",    "logo": "logos/wonder.png",    "available": true,  "sort": 2, "mapWidth": 430 },
-  { "id": "dream",     "name": "Disney Dream",     "dataFile": "rooms/dream.json",     "logo": "logos/dream.png",     "available": false, "sort": 3 },
+  { "id": "wonder",    "name": "Disney Wonder",    "dataFile": "rooms/wonder.json",    "logo": "logos/wonder.png",    "available": true,  "sort": 2, "mapWidth": 380 },
+  { "id": "dream",     "name": "Disney Dream",     "dataFile": "rooms/dream.json",     "logo": "logos/dream.png",     "available": true,  "sort": 3, "mapWidth": 400 },
   { "id": "fantasy",   "name": "Disney Fantasy",   "dataFile": "rooms/fantasy.json",   "logo": "logos/fantasy.png",   "available": false, "sort": 4 },
   { "id": "wish",      "name": "Disney Wish",      "dataFile": "rooms/wish.json",      "logo": "logos/wish.png",      "available": true,  "sort": 5, "mapWidth": 520 },
   { "id": "treasure",  "name": "Disney Treasure",  "dataFile": "rooms/treasure.json",  "logo": "logos/treasure.png",  "available": false, "sort": 6 },
