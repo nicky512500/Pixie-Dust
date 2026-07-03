@@ -6,5 +6,5 @@
   { "id": "wish",      "name": "Disney Wish",      "dataFile": "rooms/wish.json",      "logo": "logos/wish.png",      "available": true,  "sort": 5, "mapWidth": 520 },
   { "id": "treasure",  "name": "Disney Treasure",  "dataFile": "rooms/treasure.json",  "logo": "logos/treasure.png",  "available": true,  "sort": 6, "mapWidth": 520 },
   { "id": "adventure", "name": "Disney Adventure", "dataFile": "rooms/adventure.json", "logo": "logos/adventure.png", "available": true,  "sort": 7 },
-  { "id": "destiny",   "name": "Disney Destiny",   "dataFile": "rooms/destiny.json",   "logo": "logos/destiny.png",   "available": false, "sort": 8 }
+  { "id": "destiny",   "name": "Disney Destiny",   "dataFile": "rooms/destiny.json",   "logo": "logos/destiny.png",   "available": true,  "sort": 8, "mapWidth": 520 }
 ]
